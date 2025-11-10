@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>PSSI Mentawai</title>
-  <link rel="manifest" href="manifest.json">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
   <style>
     :root {
@@ -110,21 +109,28 @@
 </div>
 
 <script>
-  // === GLOBALS ===
+  // === GANTI DENGAN URL WEB APP ANDA ===
+  const API_URL = 'https://script.google.com/macros/s/AKfycbx05ahOZT41R6hW-DcvuXGJRcY3nM-apyne08nsLFk672iH6HMjRPsvsBktg7Y_jAlx/exec'; // GANTI DENGAN URL ANDA
+  const IMGBB_KEY = 'YOUR_IMGBB_API_KEY'; // Ganti dengan API Key imgbb
+
   let currentUser = null;
   let sessionId = localStorage.getItem('sessionId');
-  let currentPage = 'home';
   let historyStack = ['home'];
   let selectedMatch = null;
   let chatWith = null;
-  const IMGBB_KEY = 'YOUR_IMGBB_API_KEY'; // Ganti dengan API Key imgbb Anda
 
-  window.onload = () => {
-    if (sessionId) checkSession();
-    else showLogin();
-    setupBackButton();
-    setInterval(refreshChatBadge, 5000);
-  };
+  // === API CALLER ===
+  async function api(action, params = {}) {
+    const url = new URL(API_URL);
+    url.searchParams.append('action', action);
+    Object.keys(params).forEach(key => {
+      const val = typeof params[key] === 'object' ? JSON.stringify(params[key]) : params[key];
+      url.searchParams.append(key, val);
+    });
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Network error');
+    return await res.json();
+  }
 
   // === UTILS ===
   function showLoading(show = true) {
@@ -152,11 +158,12 @@
   function $(id) { return document.getElementById(id); }
 
   // === AUTH ===
-  function login() {
+  async function login() {
     const u = $('username').value.trim(), p = $('password').value;
     if (!u || !p) return showToast('Isi username dan password', 'danger');
     showLoading();
-    google.script.run.withSuccessHandler(res => {
+    try {
+      const res = await api('login', { username: u, password: p });
       showLoading(false);
       if (res.success) {
         currentUser = res.user; sessionId = res.sessionId;
@@ -166,12 +173,16 @@
         loadPage('home');
         startSessionCheck();
       } else showToast(res.message || 'Login gagal', 'danger');
-    }).login(u, p);
+    } catch (err) {
+      showLoading(false); showToast('Koneksi gagal', 'danger');
+    }
   }
 
-  function checkSession() {
+  async function checkSession() {
+    if (!sessionId) return showLogin();
     showLoading();
-    google.script.run.withSuccessHandler(res => {
+    try {
+      const res = await api('checkSession', { sessionId });
       showLoading(false);
       if (res.valid) {
         currentUser = res.user;
@@ -180,11 +191,11 @@
         loadPage('home');
         startSessionCheck();
       } else logout();
-    }).checkSession(sessionId);
+    } catch { showLoading(false); logout(); }
   }
 
   function logout() {
-    if (sessionId) google.script.run.logout(sessionId);
+    if (sessionId) api('logout', { sessionId });
     localStorage.removeItem('sessionId');
     sessionId = null; currentUser = null;
     $('app').classList.add('d-none');
@@ -195,9 +206,9 @@
   let sessionInterval;
   function startSessionCheck() {
     sessionInterval = setInterval(() => {
-      google.script.run.withSuccessHandler(res => {
+      api('checkSession', { sessionId }).then(res => {
         if (!res.valid) { showToast('Sesi habis', 'danger'); logout(); }
-      }).checkSession(sessionId);
+      });
     }, 60000);
   }
   function stopSessionCheck() { clearInterval(sessionInterval); }
@@ -208,7 +219,6 @@
     $(`page-${page}`).classList.remove('d-none');
     document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
     document.querySelector(`.nav-item[onclick="showPage('${page}')"]`)?.classList.add('active');
-    currentPage = page;
     historyStack.push(page);
     loadPage(page);
   }
@@ -221,42 +231,37 @@
     }
   }
 
-  function setupBackButton() {
-    window.addEventListener('popstate', () => {
-      if (historyStack.length > 1) goBack();
-    });
-  }
+  window.addEventListener('popstate', goBack);
 
   // === PAGE LOADERS ===
-  function loadPage(page) {
+  async function loadPage(page) {
     const el = $(`page-${page}`);
     el.innerHTML = '<div class="card"><p>Memuat...</p></div>';
-    setTimeout(() => {
-      if (page === 'home') loadHome();
-      else if (page === 'pemain') loadPemain();
-      else if (page === 'jadwal') loadJadwal();
-      else if (page === 'berita') loadBerita();
-      else if (page === 'chat') loadChatList();
-    }, 100);
+    try {
+      if (page === 'home') await loadHome();
+      else if (page === 'pemain') await loadPemain();
+      else if (page === 'jadwal') await loadJadwal();
+      else if (page === 'berita') await loadBerita();
+      else if (page === 'chat') await loadChatList();
+    } catch (err) {
+      el.innerHTML = '<div class="card"><p>Gagal memuat data.</p></div>';
+    }
   }
 
   // === HOME - A1 KLUB ===
-  function loadHome() {
-    const el = $('page-home');
-    google.script.run.withSuccessHandler(klub => {
-      const isAdminPusat = currentUser.tipeUser === 'ADMIN_PUSAT';
-      const isAdminKlub = currentUser.tipeUser === 'ADMIN_KLUB';
-      const canEdit = isAdminPusat || (isAdminKlub && (!klub || klub.STATUS_SETUJUI !== 'DISETUJUI'));
+  async function loadHome() {
+    const klub = await api('getKlubData', { idKlub: currentUser.idKlub });
+    const isAdminPusat = currentUser.tipeUser === 'ADMIN_PUSAT';
+    const canEdit = isAdminPusat || (currentUser.tipeUser === 'ADMIN_KLUB' && (!klub || klub.STATUS_SETUJUI !== 'DISETUJUI'));
 
-      el.innerHTML = `
-        <div class="card">
-          <h3>Selamat Datang, ${currentUser.namaLengkap}</h3>
-          <p><strong>TIPE:</strong> ${currentUser.tipeUser}<br>
-             <strong>ID Klub:</strong> ${currentUser.idKlub}<br>
-             <strong>Nama Klub:</strong> ${currentUser.namaKlub}</p>
-          <button class="btn btn-primary" onclick="openKlubForm(${klub ? JSON.stringify(klub) : 'null'})">Kelola Data Klub</button>
-        </div>`;
-    }).getKlubData(currentUser.idKlub);
+    $('page-home').innerHTML = `
+      <div class="card">
+        <h3>Selamat Datang, ${currentUser.namaLengkap}</h3>
+        <p><strong>TIPE:</strong> ${currentUser.tipeUser}<br>
+           <strong>ID Klub:</strong> ${currentUser.idKlub}<br>
+           <strong>Nama Klub:</strong> ${currentUser.namaKlub}</p>
+        <button class="btn btn-primary" onclick="openKlubForm(${klub ? JSON.stringify(klub) : 'null'})">Kelola Data Klub</button>
+      </div>`;
   }
 
   function openKlubForm(klub) {
@@ -283,7 +288,7 @@
     $('page-home').innerHTML = form;
   }
 
-  function saveKlub() {
+  async function saveKlub() {
     const data = {
       JULUKAN: $('julukan').value,
       TANGGAL_BERDIRI: $('tglBerdiri').value,
@@ -301,60 +306,56 @@
       STAFF_LAINNYA: $('staff').value
     };
     showLoading();
-    google.script.run.withSuccessHandler(res => {
-      showLoading(false);
-      if (res.success) {
-        showToast('Data klub disimpan');
-        loadHome();
-      } else showToast(res.message || 'Gagal simpan', 'danger');
-    }).saveKlubData(data, currentUser);
+    const res = await api('saveKlubData', { data, user: currentUser });
+    showLoading(false);
+    if (res.success) {
+      showToast('Data klub disimpan');
+      loadHome();
+    } else showToast(res.message || 'Gagal simpan', 'danger');
   }
 
   // === PEMAIN - A2 ===
-  function loadPemain() {
-    const el = $('page-pemain');
-    google.script.run.withSuccessHandler(pemain => {
-      google.script.run.withSuccessHandler(klub => {
-        if (!klub || klub.STATUS_SETUJUI !== 'DISETUJUI') {
-          el.innerHTML = `<div class="card"><p>Data klub belum disetujui oleh Admin Pusat.</p></div>`;
-          return;
-        }
-        let rows = '';
-        const usedIds = pemain.map(p => p.ID_PEMAIN);
-        for (let i = 0; i < 25; i++) {
-          const p = pemain[i] || {};
-          rows += `
-            <tr>
-              <td><input type="number" value="${p.ID_PEMAIN || ''}" onchange="checkDuplicate(this, ${usedIds.join(',')})" class="form-control"></td>
-              <td><input value="${p.NAMA_LENGKAP || ''}" class="form-control"></td>
-              <td><input value="${p.NAMA_PUNGGUNG || ''}" class="form-control"></td>
-              <td><input type="number" value="${p.NO_PUNGGUNG || ''}" class="form-control"></td>
-              <td><input type="date" value="${p.TANGGAL_LAHIR || ''}" class="form-control"></td>
-              <td><input value="${p.KETERANGAN || ''}" class="form-control"></td>
-              <td><button class="btn btn-sm btn-success" onclick="savePemainRow(this)">Simpan</button></td>
-            </tr>`;
-        }
-        el.innerHTML = `
-          <div class="card">
-            <h3>Data Pemain (Max 16)</h3>
-            <table class="table">
-              <thead><tr><th>ID</th><th>Nama</th><th>Punggung</th><th>No</th><th>Lahir</th><th>Ket</th><th></th></tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>`;
-      }).getKlubData(currentUser.idKlub);
-    }).getPemainKlub(currentUser.idKlub);
+  async function loadPemain() {
+    const pemain = await api('getPemainKlub', { idKlub: currentUser.idKlub });
+    const klub = await api('getKlubData', { idKlub: currentUser.idKlub });
+    if (!klub || klub.STATUS_SETUJUI !== 'DISETUJUI') {
+      $('page-pemain').innerHTML = `<div class="card"><p>Data klub belum disetujui.</p></div>`;
+      return;
+    }
+    let rows = '';
+    const usedIds = pemain.map(p => p.ID_PEMAIN);
+    for (let i = 0; i < 25; i++) {
+      const p = pemain[i] || {};
+      rows += `
+        <tr>
+          <td><input type="number" value="${p.ID_PEMAIN || ''}" onchange="checkDuplicate(this, [${usedIds}])" class="form-control"></td>
+          <td><input value="${p.NAMA_LENGKAP || ''}" class="form-control"></td>
+          <td><input value="${p.NAMA_PUNGGUNG || ''}" class="form-control"></td>
+          <td><input type="number" value="${p.NO_PUNGGUNG || ''}" class="form-control"></td>
+          <td><input type="date" value="${p.TANGGAL_LAHIR || ''}" class="form-control"></td>
+          <td><input value="${p.KETERANGAN || ''}" class="form-control"></td>
+          <td><button class="btn btn-sm btn-success" onclick="savePemainRow(this)">Simpan</button></td>
+        </tr>`;
+    }
+    $('page-pemain').innerHTML = `
+      <div class="card">
+        <h3>Data Pemain</h3>
+        <table class="table">
+          <thead><tr><th>ID</th><th>Nama</th><th>Punggung</th><th>No</th><th>Lahir</th><th>Ket</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
 
   function checkDuplicate(input, used) {
     const val = input.value;
-    if (used.includes(val) && val) {
+    if (used.includes(Number(val)) && val) {
       showToast('ID Pemain sudah digunakan', 'danger');
       input.value = '';
     }
   }
 
-  function savePemainRow(btn) {
+  async function savePemainRow(btn) {
     const row = btn.parentElement.parentElement;
     const data = {
       ID_PEMAIN: row.cells[0].querySelector('input').value,
@@ -366,75 +367,68 @@
     };
     if (!data.ID_PEMAIN) return showToast('ID Pemain wajib', 'danger');
     showLoading();
-    google.script.run.withSuccessHandler(res => {
-      showLoading(false);
-      if (res.success) showToast('Pemain disimpan');
-      else showToast('Gagal', 'danger');
-    }).savePemain(data, currentUser);
+    const res = await api('savePemain', { data, user: currentUser });
+    showLoading(false);
+    showToast(res.success ? 'Pemain disimpan' : 'Gagal', res.success ? 'success' : 'danger');
   }
 
   // === JADWAL & A3 ===
-  function loadJadwal() {
-    google.script.run.withSuccessHandler(jadwal => {
-      let cards = '';
-      jadwal.forEach(m => {
-        if (m.ID_KLUB === currentUser.idKlub) {
-          cards += `
-            <div class="card match-card" onclick="openPendaftaran('${m.ID_PERTANDINGAN}')">
-              <h4>${m.NAMA_KLUB}</h4>
-              <p><strong>${m.TANGGAL_PERTANDINGAN}</strong><br>${m.TYPE_PERTANDINGAN}<br>Lokasi: ${m.LOKASI_PERTANDINGAN}</p>
-            </div>`;
-        }
-      });
-      $('page-jadwal').innerHTML = cards || '<div class="card"><p>Tidak ada jadwal.</p></div>';
-    }).getJadwalByKlub(currentUser.idKlub);
+  async function loadJadwal() {
+    const jadwal = await api('getJadwalByKlub', { idKlub: currentUser.idKlub });
+    let cards = '';
+    jadwal.forEach(m => {
+      cards += `
+        <div class="card match-card" onclick="openPendaftaran('${m.ID_PERTANDINGAN}')">
+          <h4>${m.NAMA_KLUB}</h4>
+          <p><strong>${m.TANGGAL_PERTANDINGAN}</strong><br>${m.TYPE_PERTANDINGAN}<br>Lokasi: ${m.LOKASI_PERTANDINGAN}</p>
+        </div>`;
+    });
+    $('page-jadwal').innerHTML = cards || '<div class="card"><p>Tidak ada jadwal.</p></div>';
   }
 
-  function openPendaftaran(idPertandingan) {
+  async function openPendaftaran(idPertandingan) {
     selectedMatch = idPertandingan;
-    google.script.run.withSuccessHandler(daftar => {
-      google.script.run.withSuccessHandler(pemain => {
-        let rows = '';
-        const usedIds = daftar.map(d => d.ID_PEMAIN);
-        for (let i = 0; i < 25; i++) {
-          const d = daftar[i] || {};
-          const options = pemain.map(p => `<option value="${p.ID_PEMAIN}">${p.ID_PEMAIN} - ${p.NAMA_PUNGGUNG}</option>`).join('');
-          rows += `
-            <tr>
-              <td><select class="form-control" onchange="fillPemain(this)">${options}</select></td>
-              <td><input value="${d.NAMA_PUNGGUNG || ''}" class="form-control"></td>
-              <td><input type="number" value="${d.NO_PUNGGUNG || ''}" class="form-control"></td>
-              <td><input value="${d.POSISI || ''}" class="form-control"></td>
-              <td><select class="form-control"><option>PEMAIN UTAMA</option><option>PEMAIN CADANGAN</option></select></td>
-              <td><button class="btn btn-sm btn-success" onclick="saveDaftarRow(this)">Simpan</button></td>
-            </tr>`;
-        }
-        $('page-jadwal').innerHTML = `
-          <div class="card">
-            <button class="btn btn-sm btn-warning" onclick="loadJadwal()">Kembali</button>
-            <h3>Pendaftaran - ${idPertandingan}</h3>
-            <table class="table">
-              <thead><tr><th>ID Pemain</th><th>Nama Punggung</th><th>No</th><th>Posisi</th><th>Tipe</th><th></th></tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>`;
-      }).getPemainKlub(currentUser.idKlub);
-    }).getPendaftaran(idPertandingan, currentUser.idKlub);
+    const daftar = await api('getPendaftaran', { idPertandingan, idKlub: currentUser.idKlub });
+    const pemain = await api('getPemainKlub', { idKlub: currentUser.idKlub });
+    let rows = '';
+    const usedIds = daftar.map(d => d.ID_PEMAIN);
+    for (let i = 0; i < 25; i++) {
+      const d = daftar[i] || {};
+      const options = pemain.map(p => `<option value="${p.ID_PEMAIN}">${p.ID_PEMAIN} - ${p.NAMA_PUNGGUNG}</option>`).join('');
+      rows += `
+        <tr>
+          <td><select class="form-control" onchange="fillPemain(this)">${options}</select></td>
+          <td><input value="${d.NAMA_PUNGGUNG || ''}" class="form-control"></td>
+          <td><input type="number" value="${d.NO_PUNGGUNG || ''}" class="form-control"></td>
+          <td><input value="${d.POSISI || ''}" class="form-control"></td>
+          <td><select class="form-control"><option>PEMAIN UTAMA</option><option>PEMAIN CADANGAN</option></select></td>
+          <td><button class="btn btn-sm btn-success" onclick="saveDaftarRow(this)">Simpan</button></td>
+        </tr>`;
+    }
+    $('page-jadwal').innerHTML = `
+      <div class="card">
+        <button class="btn btn-sm btn-warning" onclick="loadJadwal()">Kembali</button>
+        <h3>Pendaftaran - ${idPertandingan}</h3>
+        <table class="table">
+          <thead><tr><th>ID Pemain</th><th>Nama Punggung</th><th>No</th><th>Posisi</th><th>Tipe</th><th></th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   }
 
   function fillPemain(select) {
     const row = select.parentElement.parentElement;
     const id = select.value;
-    google.script.run.withSuccessHandler(p => {
+    api('getPemainById', { id, idKlub: currentUser.idKlub }).then(p => {
       if (p) {
         row.cells[1].querySelector('input').value = p.NAMA_PUNGGUNG;
         row.cells[2].querySelector('input').value = p.NO_PUNGGUNG;
         row.cells[3].querySelector('input').value = p.POSISI || '';
       }
-    }).getPemainById(id, currentUser.idKlub); // Anda perlu tambahkan fungsi ini di backend
+    });
   }
 
-  function saveDaftarRow(btn) {
+  async function saveDaftarRow(btn) {
     const row = btn.parentElement.parentElement;
     const data = {
       ID_PERTANDINGAN: selectedMatch,
@@ -446,31 +440,29 @@
       TIPE_PEMAIN: row.cells[4].querySelector('select').value
     };
     showLoading();
-    google.script.run.withSuccessHandler(res => {
-      showLoading(false);
-      showToast(res.success ? 'Tersimpan' : 'Gagal', res.success ? 'success' : 'danger');
-    }).savePendaftaran(data, currentUser);
+    const res = await api('savePendaftaran', { data, user: currentUser });
+    showLoading(false);
+    showToast(res.success ? 'Tersimpan' : 'Gagal', res.success ? 'success' : 'danger');
   }
 
   // === BERITA ===
-  function loadBerita() {
-    google.script.run.withSuccessHandler(berita => {
-      let list = '';
-      berita.forEach(b => {
-        list += `
-          <div class="card">
-            <h4>${b.judul}</h4>
-            <p><small>${b.tanggal} - ${b.penulis}</small></p>
-            <p>${b.isi}</p>
-            ${b.foto ? `<img src="${b.foto}" class="img-preview">` : ''}
-          </div>`;
-      });
-      $('page-berita').innerHTML = `
+  async function loadBerita() {
+    const berita = await api('getBerita');
+    let list = '';
+    berita.forEach(b => {
+      list += `
         <div class="card">
-          <button class="btn btn-primary" onclick="openBeritaForm()">+ Berita Baru</button>
-        </div>
-        ${list}`;
-    }).getBerita();
+          <h4>${b.judul}</h4>
+          <p><small>${b.tanggal} - ${b.penulis}</small></p>
+          <p>${b.isi}</p>
+          ${b.foto ? `<img src="${b.foto}" class="img-preview">` : ''}
+        </div>`;
+    });
+    $('page-berita').innerHTML = `
+      <div class="card">
+        <button class="btn btn-primary" onclick="openBeritaForm()">+ Berita Baru</button>
+      </div>
+      ${list}`;
   }
 
   function openBeritaForm() {
@@ -498,99 +490,96 @@
       fotoUrl = json.data.url;
     }
     showLoading();
-    google.script.run.withSuccessHandler(res => {
-      showLoading(false);
-      if (res.success) {
-        showToast('Berita dipublish');
-        loadBerita();
-      }
-    }).saveBerita({ JUDUL_BERITA: judul, ISI_BERITA: isi, POTO_URL: fotoUrl }, currentUser);
+    const res = await api('saveBerita', { data: { JUDUL_BERITA: judul, ISI_BERITA: isi, POTO_URL: fotoUrl }, user: currentUser });
+    showLoading(false);
+    if (res.success) {
+      showToast('Berita dipublish');
+      loadBerita();
+    }
   }
 
   // === CHAT ===
-  function loadChatList() {
-    google.script.run.withSuccessHandler(users => {
-      google.script.run.withSuccessHandler(active => {
-        const activeSet = new Set(active.map(u => u.username));
-        let list = '';
-        users.forEach(u => {
-          if (u.username !== currentUser.username) {
-            const isActive = activeSet.has(u.username);
-            list += `
-              <div class="card" onclick="openChat('${u.username}', '${u.namaLengkap}')">
-                <div style="display:flex; align-items:center;">
-                  <div style="position:relative;">
-                    <i class="fas fa-user-circle fa-2x" style="color:#ccc"></i>
-                    ${isActive ? '<div class="online-dot"></div>' : ''}
-                  </div>
-                  <div style="margin-left:1rem;">
-                    <strong>${u.namaLengkap}</strong><br>
-                    <small>${u.tipeUser} - ${u.namaKlub}</small>
-                  </div>
-                </div>
-              </div>`;
-          }
-        });
-        $('page-chat').innerHTML = list || '<div class="card"><p>Tidak ada user lain.</p></div>';
-      }).getActiveUsers();
-    }).getAllUsers();
+  async function loadChatList() {
+    const users = await api('getAllUsers');
+    const active = await api('getActiveUsers');
+    const activeSet = new Set(active.map(u => u.username));
+    let list = '';
+    users.forEach(u => {
+      if (u.username !== currentUser.username) {
+        const isActive = activeSet.has(u.username);
+        list += `
+          <div class="card" onclick="openChat('${u.username}', '${u.namaLengkap}')">
+            <div style="display:flex; align-items:center;">
+              <div style="position:relative;">
+                <i class="fas fa-user-circle fa-2x" style="color:#ccc"></i>
+                ${isActive ? '<div class="online-dot"></div>' : ''}
+              </div>
+              <div style="margin-left:1rem;">
+                <strong>${u.namaLengkap}</strong><br>
+                <small>${u.tipeUser} - ${u.namaKlub}</small>
+              </div>
+            </div>
+          </div>`;
+      }
+    });
+    $('page-chat').innerHTML = list || '<div class="card"><p>Tidak ada user lain.</p></div>';
   }
 
-  function openChat(username, nama) {
+  async function openChat(username, nama) {
     chatWith = { username, nama };
     showPage('chat-detail');
-    loadChatDetail();
+    await loadChatDetail();
     setInterval(loadChatDetail, 3000);
   }
 
-  function loadChatDetail() {
-    google.script.run.withSuccessHandler(msgs => {
-      let chat = '';
-      msgs.forEach(m => {
-        const isSent = m.pengirim === currentUser.username;
-        chat += `
-          <div class="msg ${isSent ? 'sent' : 'received'}">
-            ${m.pesan}
-            <div class="msg-time">${new Date(m.timestamp).toLocaleTimeString()}</div>
-          </div>`;
-      });
-      const el = $('page-chat-detail');
-      el.innerHTML = `
-        <div class="card">
-          <button class="btn btn-sm btn-warning" onclick="showPage('chat')">Kembali</button>
-          <h3>Chat dengan ${chatWith.nama}</h3>
-          <div class="chat-box" id="chatBox">${chat}</div>
-          <div style="display:flex; gap:0.5rem;">
-            <input id="msgInput" placeholder="Ketik pesan..." class="form-control" onkeypress="if(event.key==='Enter') sendMessage()">
-            <button class="btn btn-primary" onclick="sendMessage()">Kirim</button>
-          </div>
+  async function loadChatDetail() {
+    const msgs = await api('getChatHistory', { user1: currentUser.username, user2: chatWith.username });
+    let chat = '';
+    msgs.forEach(m => {
+      const isSent = m.pengirim === currentUser.username;
+      chat += `
+        <div class="msg ${isSent ? 'sent' : 'received'}">
+          ${m.pesan}
+          <div class="msg-time">${new Date(m.timestamp).toLocaleTimeString()}</div>
         </div>`;
-      $('chatBox').scrollTop = $('chatBox').scrollHeight;
-    }).getChatHistory(currentUser.username, chatWith.username);
+    });
+    $('page-chat-detail').innerHTML = `
+      <div class="card">
+        <button class="btn btn-sm btn-warning" onclick="showPage('chat')">Kembali</button>
+        <h3>Chat dengan ${chatWith.nama}</h3>
+        <div class="chat-box" id="chatBox">${chat}</div>
+        <div style="display:flex; gap:0.5rem;">
+          <input id="msgInput" placeholder="Ketik pesan..." class="form-control" onkeypress="if(event.key==='Enter') sendMessage()">
+          <button class="btn btn-primary" onclick="sendMessage()">Kirim</button>
+        </div>
+      </div>`;
+    $('chatBox').scrollTop = $('chatBox').scrollHeight;
   }
 
-  function sendMessage() {
+  async function sendMessage() {
     const input = $('msgInput');
     const msg = input.value.trim();
     if (!msg) return;
-    google.script.run.sendMessage(currentUser.username, chatWith.username, msg);
+    await api('sendMessage', { sender: currentUser.username, receiver: chatWith.username, message: msg });
     input.value = '';
     setTimeout(loadChatDetail, 500);
   }
 
-  function refreshChatBadge() {
+  async function refreshChatBadge() {
     if (!currentUser) return;
-    google.script.run.withSuccessHandler(count => {
-      const badge = $('chatBadge');
-      if (count > 0) {
-        badge.textContent = count > 99 ? '99+' : count;
-        badge.classList.remove('d-none');
-      } else badge.classList.add('d-none');
-    }).getUnreadCount(currentUser.username);
+    const count = await api('getUnreadCount', { username: currentUser.username });
+    const badge = $('chatBadge');
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : count;
+      badge.classList.remove('d-none');
+    } else badge.classList.add('d-none');
   }
-</script>
 
-<!-- GANTI DENGAN URL WEB APP ANDA -->
-<script src="https://script.google.com/macros/s/AKfycbx05ahOZT41R6hW-DcvuXGJRcY3nM-apyne08nsLFk672iH6HMjRPsvsBktg7Y_jAlx/exec" id="gas-script"></script>
+  // === INIT ===
+  window.onload = () => {
+    if (sessionId) checkSession();
+    setInterval(refreshChatBadge, 5000);
+  };
+</script>
 </body>
 </html>
