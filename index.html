@@ -1,28 +1,25 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ASKAB PSSI KEPULAUAN MENTAWAI</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    html, body, iframe { height:100%; width:100%; border:none; }
-    .loader { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASKAB PSSI KEPULAUAN MENTAWAI - Data Center</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            overflow: hidden; /* Mencegah scroll ganda */
+        }
+        .app-iframe {
+            border: none;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
 </head>
 <body>
-  <div class="loader spinner-border text-primary" id="loader"></div>
-  <iframe id="appFrame" src="" frameborder="0" allowfullscreen></iframe>
-
-  <script>
-    // GANTI DENGAN URL WEB APP ANDA
-    const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyuy5Z5jT5L0WIrkU4c0kqmwyMEMXoKP36k8HYl25TWfZX5Zfa2rjtJaM02029ArUbA5g/exec';
-
-    const iframe = document.getElementById('appFrame');
-    const loader = document.getElementById('loader');
-
-    iframe.src = WEB_APP_URL;
-    iframe.onload = () => loader.remove();
-  </script>
+    <iframe class="app-iframe" src="https://script.google.com/macros/s/AKfycbxXLDcnOo7lVp65Dzt6u208SCct4TwHNH7Pn9Ygsd4iYcpf2VnTkj_YHLSbOVH_-CcXLg/exec"></iframe>
 </body>
 </html>
