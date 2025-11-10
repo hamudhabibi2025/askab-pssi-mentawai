@@ -1,582 +1,535 @@
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwE_HroFq8uYAU8SXVWrDqoz3MtoJyQp3fyf53tBpKDVUAv41SF3bv_xU5R6gmv7-MM/exec"; // <<< GANTI DENGAN URL WEB APP ANDA DI SINI
-const appContent = document.getElementById('app-content');
-const appHeader = document.getElementById('app-header');
-const navItems = document.querySelectorAll('.nav-item');
-const crudModal = document.getElementById('crud-modal');
-const crudForm = document.getElementById('crud-form');
-const formTitle = document.getElementById('form-title');
-const toastNotification = document.getElementById('toast-notification');
-const loadingSpinner = document.getElementById('loading-spinner');
-const confirmModal = document.getElementById('confirmation-modal');
-const confirmMessage = document.getElementById('confirm-message');
-const confirmYes = document.getElementById('confirm-yes');
-let currentSheetData = {}; // Cache data from sheets
+// GANTI DENGAN URL APPS SCRIPT ANDA SETELAH DEPLOY
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzzn7ZieFMApGz0qxdljK6aa1okfDOSuCh8h1i8-LKe066umohUR4DlVIDz-Kg8ieHY/exec'; 
+const IMGBB_API_KEY = 'e9c06944a26b81e611e960c10a31634f'; 
 
-// --- Utility Functions ---
+// Variabel Global
+const pages = document.querySelectorAll('.page');
+const navLinks = document.querySelectorAll('.nav-link[data-page]');
+const loadingOverlay = document.getElementById('loading-overlay');
+const toastElement = document.getElementById('liveToast');
+const toastBody = document.getElementById('toast-body');
+const toastTitle = document.getElementById('toast-title');
+const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+const beritaModal = new bootstrap.Modal(document.getElementById('beritaModal'));
+const kompetisiModal = new bootstrap.Modal(document.getElementById('kompetisiModal'));
+const klubModal = new bootstrap.Modal(document.getElementById('klubModal'));
 
-function showLoading() { loadingSpinner.style.display = 'flex'; }
-function hideLoading() { loadingSpinner.style.display = 'none'; }
+let ALL_DATA = {};
+let currentPageId = 'home-page';
 
-function showToast(message) {
-    toastNotification.textContent = message;
-    toastNotification.classList.add('show');
-    setTimeout(() => {
-        toastNotification.classList.remove('show');
-    }, 3000);
+// --- [ UTILITY UI ] -----------------------------------------------------------------------------------
+
+function showLoading() {
+    loadingOverlay.classList.remove('d-none');
 }
 
-function showConfirmation(message, callback) {
-    confirmMessage.textContent = message;
-    confirmModal.style.display = 'block';
-    
-    confirmYes.onclick = () => {
-        confirmModal.style.display = 'none';
-        callback(true);
-    };
-
-    document.getElementById('confirm-no').onclick = () => {
-        confirmModal.style.display = 'none';
-        callback(false);
-    };
+function hideLoading() {
+    loadingOverlay.classList.add('d-none');
 }
 
-function fetchApi(action, method = 'GET', data = null) {
-    const url = `${WEB_APP_URL}?action=${action}`;
-    const options = {
-        method: method,
-        muteHttpExceptions: true
-    };
-    
-    if (data && method === 'POST') {
-        options.body = JSON.stringify(data);
-        options.headers = { 'Content-Type': 'application/json' };
+function showToast(message, isSuccess = true) {
+    toastTitle.textContent = isSuccess ? 'Sukses' : 'Error';
+    toastElement.querySelector('.toast-header').className = `toast-header text-white ${isSuccess ? 'bg-primary' : 'bg-danger'}`;
+    toastBody.textContent = message;
+    const toast = new bootstrap.Toast(toastElement);
+    toast.show();
+}
+
+function navigateTo(targetPageId, isFromHistory = false) {
+    if (isFromHistory && currentPageId === 'home-page' && targetPageId === 'home-page') {
+        return; 
     }
-
-    return fetch(url, options)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.status === 'error') {
-                throw new Error(data.message);
-            }
-            return data;
-        });
-}
-
-function getBase64Image(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
+    
+    pages.forEach(page => {
+        page.classList.add('d-none');
+        page.classList.remove('active');
     });
+    
+    const targetPage = document.getElementById(targetPageId);
+    if(targetPage) {
+        targetPage.classList.remove('d-none');
+        targetPage.classList.add('active');
+    }
+    
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        if (link.dataset.page === targetPageId) {
+            link.classList.add('active');
+        }
+    });
+
+    currentPageId = targetPageId;
+
+    if (!isFromHistory) {
+        history.pushState({ page: targetPageId }, '', `#${targetPageId.replace('-page', '')}`);
+    }
+    
+    // Muat data saat navigasi
+    if (targetPageId === 'home-page') loadHomePageData();
+    if (targetPageId === 'kompetisi-page') loadKompetisi();
+    if (targetPageId === 'klub-page') loadKlub();
+    if (targetPageId === 'setting-page') loadSettingInitialData();
 }
 
-// Convert DD/MM/YYYY to YYYY-MM-DD for date input value
-function dateToInput(dateString) {
-    if (!dateString) return '';
-    const parts = dateString.split('/');
-    if (parts.length === 3) {
-        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+// --- [ API & UTILITY KOMUNIKASI ] -------------------------------------------------------------
+
+async function fetchAPI(sheet, action, data = {}) {
+    showLoading();
+    const url = `${APPS_SCRIPT_URL}?sheet=${sheet}&action=${action}`;
+    
+    const options = {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: JSON.stringify(data)
+    };
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const result = await response.json();
+        hideLoading();
+        
+        if (!result.success) {
+            showToast(`Gagal: ${result.message}`, false);
+            console.error("API Gagal:", result.message, result.data);
+            return null;
+        }
+        
+        showToast(result.message || 'Operasi berhasil!');
+        return result.data;
+
+    } catch (error) {
+        hideLoading();
+        showToast(`API Gagal: ${error.message}`, false);
+        console.error("API Error:", error);
+        return null;
     }
-    if (dateString.match(/^\d{4}-\d{2}-\d{2}/)) {
-        return dateString.substring(0, 10);
+}
+
+async function uploadImage(file) {
+    if (!file) return null;
+    
+    showLoading();
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('key', IMGBB_API_KEY);
+
+    try {
+        const response = await fetch('https://api.imgbb.com/1/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+        hideLoading();
+
+        if (result.success) {
+            return result.data.url;
+        } else {
+            showToast(`Gagal unggah gambar: ${result.error.message}`, false);
+            return null;
+        }
+    } catch (error) {
+        hideLoading();
+        showToast(`Error unggah gambar: ${error.message}`, false);
+        return null;
+    }
+}
+
+function formatDateForInput(dateString) {
+    if (!dateString) return '';
+    try {
+        const parts = dateString.split(/[\/\-]/);
+        let d, m, y;
+        
+        if (parts.length === 3) {
+            if (parts[0].length === 4) { [y, m, d] = parts; } else { [d, m, y] = parts; }
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+    } catch (e) {
+        console.warn("Format tanggal tidak dikenal:", dateString);
     }
     return '';
 }
 
-// Convert YYYY-MM-DD (from input) to DD/MM/YYYY (for Sheets)
-function dateToSheet(dateString) {
-    if (!dateString || dateString.length !== 10) return '';
-    const parts = dateString.split('-');
-    if (parts.length === 3) {
-        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+// --- [ PEMUATAN DATA STATIS ] -------------------------------------------------------------------
+
+async function loadStaticData() {
+    const headerData = await fetchAPI('kepala_halaman', 'READ', {});
+    if (headerData) {
+        ALL_DATA.kepala_halaman = headerData;
+        document.getElementById('logo_pssi').src = headerData.logo_pssi;
+        document.getElementById('judul_kepala').textContent = headerData.judul_kepala;
+        document.getElementById('logo_askab').src = headerData.logo_askab;
     }
-    return dateString;
-}
 
-// --- Header Management ---
-
-async function loadHeader() {
-    try {
-        const response = await fetchApi('kepala_halaman');
-        const headerData = response.data[0] || {};
+    const bannerData = await fetchAPI('banner', 'READ', {});
+    if (bannerData) {
+        ALL_DATA.banner = bannerData;
+        const bannerInner = document.getElementById('banner-inner');
+        bannerInner.innerHTML = '';
+        const images = [bannerData['poto-1'], bannerData['poto-2'], bannerData['poto-3']].filter(url => url && url.startsWith('http'));
         
-        appHeader.innerHTML = `
-            <img src="${headerData.logo_pssi || 'placeholder.png'}" alt="Logo PSSI" id="logo-pssi">
-            <h1>${headerData.judul_kepala || 'ASKAB PSSI KEPULAUAN MENTAWAI'}</h1>
-            <img src="${headerData.logo_askab || 'placeholder.png'}" alt="Logo ASKAB" id="logo-askab">
-        `;
-    } catch (error) {
-        console.error("Error loading header:", error);
-        appHeader.innerHTML = `<h1>ASKAB PSSI KEPULAUAN MENTAWAI</h1>`; // Fallback
+        images.forEach((url, index) => {
+            const item = document.createElement('div');
+            item.className = `carousel-item${index === 0 ? ' active' : ''}`;
+            item.innerHTML = `<img src="${url}" class="d-block w-100" alt="Banner ${index + 1}">`;
+            bannerInner.appendChild(item);
+        });
+        if (images.length === 0) {
+            bannerInner.innerHTML = '<div class="carousel-item active"><div class="alert alert-info text-center m-3">Belum ada gambar banner.</div></div>';
+        }
     }
 }
 
 
-// --- Form Definitions ---
+// --- [ FUNGSI FILTER ] --------------------------------------------------------------------------
 
-const FORM_DEFINITIONS = {
-    kepala_halaman: [
-        { name: 'logo_pssi', type: 'file', label: 'Logo PSSI (ImgBB)', required: true },
-        { name: 'judul_kepala', type: 'text', label: 'Judul Kepala', required: true },
-        { name: 'logo_askab', type: 'file', label: 'Logo ASKAB (ImgBB)', required: true }
-    ],
-    banner: [
-        { name: 'poto-1', type: 'file', label: 'Foto Banner 1 (ImgBB)', required: true },
-        { name: 'poto-2', type: 'file', label: 'Foto Banner 2 (ImgBB)', required: true },
-        { name: 'poto-3', type: 'file', label: 'Foto Banner 3 (ImgBB)', required: true }
-    ],
-    profil: [
-        { name: 'nama_organisasi', type: 'text', label: 'Nama Organisasi', required: true },
-        { name: 'tanggal_berdiri', type: 'date', label: 'Tanggal Berdiri', required: true },
-        { name: 'visi', type: 'textarea', label: 'Visi', required: true },
-        { name: 'misi', type: 'textarea', label: 'Misi', required: true }
-    ],
-    struktur_organisasi: [
-        { name: 'ketua', type: 'text', label: 'Ketua', required: true },
-        { name: 'wakil_ketua', type: 'text', label: 'Wakil Ketua', required: true },
-        { name: 'sekretaris', type: 'text', label: 'Sekretaris', required: true },
-        { name: 'bendahara', type: 'text', label: 'Bendahara', required: true },
-        { name: 'humas', type: 'text', label: 'Humas', required: true },
-        { name: 'media', type: 'text', label: 'Media', required: true }
-    ],
-    berita_home: [
-        { name: 'id_berita', type: 'text', label: 'ID Berita', readonly: true, isId: true },
-        { name: 'tanggal', type: 'date', label: 'Tanggal', required: true },
-        { name: 'Judul_Berita', type: 'text', label: 'Judul Berita', required: true },
-        { name: 'isi_berita', type: 'textarea', label: 'Isi Berita', required: true },
-        { name: 'gambar_1', type: 'file', label: 'Gambar 1 (ImgBB)' },
-        { name: 'gambar_2', type: 'file', label: 'Gambar 2 (ImgBB)' },
-        { name: 'gambar_3', type: 'file', label: 'Gambar 3 (ImgBB)' }
-    ],
-    kompetisi: [
-        { name: 'id_pertandingan', type: 'text', label: 'ID Pertandingan', readonly: true, isId: true },
-        { name: 'nama_kompetisi', type: 'select', label: 'Nama Kompetisi', options: ['Liga Askab', 'Liga Bupati', 'Liga Desa'], required: true },
-        { name: 'jenis_pertandingan', type: 'select', label: 'Jenis Pertandingan', options: ['Babak Fase Group', 'Babak Penyisihan', 'Babak 16 Besar', 'Babak Semifinal', 'Final'], required: true },
-        { name: 'tanggal', type: 'date', label: 'Tanggal', required: true },
-        { name: 'lokasi', type: 'text', label: 'Lokasi', required: true },
-        { name: 'nama_klub1', type: 'text', label: 'Nama Klub 1', required: true },
-        { name: 'logo_klub1', type: 'file', label: 'Logo Klub 1 (ImgBB)' },
-        { name: 'goal1', type: 'number', label: 'Goal Klub 1', default: 0 },
-        { name: 'Ket_goal1', type: 'textarea', label: 'Keterangan Goal 1' },
-        { name: 'kartu_kuning1', type: 'number', label: 'Kartu Kuning 1', default: 0 },
-        { name: 'ket_kartu_kuning1', type: 'textarea', label: 'Ket. Kartu Kuning 1' },
-        { name: 'kartu_merah1', type: 'number', label: 'Kartu Merah 1', default: 0 },
-        { name: 'ket_kartu_merah1', type: 'textarea', label: 'Ket. Kartu Merah 1' },
-        { name: 'nama_klub2', type: 'text', label: 'Nama Klub 2', required: true },
-        { name: 'logo_klub2', type: 'file', label: 'Logo Klub 2 (ImgBB)' },
-        { name: 'goal2', type: 'number', label: 'Goal Klub 2', default: 0 },
-        { name: 'Ket_goal2', type: 'textarea', label: 'Keterangan Goal 2' },
-        { name: 'kartu_kuning2', type: 'number', label: 'Kartu Kuning 2', default: 0 },
-        { name: 'ket_kartu_kuning2', type: 'textarea', label: 'Ket. Kartu Kuning 2' },
-        { name: 'kartu_merah2', type: 'number', label: 'Kartu Merah 2', default: 0 },
-        { name: 'ket_kartu_merah2', type: 'textarea', label: 'Ket. Kartu Merah 2' }
-    ],
-    klub: [
-        { name: 'id_klub', type: 'text', label: 'ID Klub', readonly: true, isId: true },
-        { name: 'nama_klub', type: 'text', label: 'Nama Klub', required: true },
-        { name: 'julukan', type: 'text', label: 'Julukan' },
-        { name: 'tanggal_berdiri', type: 'date', label: 'Tanggal Berdiri', required: true },
-        { name: 'alamat', type: 'textarea', label: 'Alamat', required: true },
-        { name: 'manejer', type: 'text', label: 'Manejer', required: true },
-        { name: 'asisten_manejer', type: 'text', label: 'Asisten Manejer' },
-        { name: 'pelatih', type: 'text', label: 'Pelatih', required: true },
-        { name: 'asisten_pelatih', type: 'text', label: 'Asisten Pelatih' },
-        { name: 'staff_lainnya', type: 'textarea', label: 'Staff Lainnya' },
-        { name: 'no_handphone_klub', type: 'number', label: 'No Handphone Klub', required: true },
-        { name: 'logo_klub', type: 'file', label: 'Logo Klub (ImgBB)' }
-    ]
-};
+function filterData(sheetName) {
+    const searchInput = document.getElementById(`search-${sheetName}`).value.toLowerCase();
+    const listContainer = document.getElementById(`${sheetName.split('_')[0]}-list`);
+    const cards = listContainer.querySelectorAll('.data-card');
 
-function createFormFields(sheetName, record = {}) {
-    const fields = FORM_DEFINITIONS[sheetName];
-    if (!fields) return;
-
-    let html = '';
-    const isEditingFixed = ['kepala_halaman', 'banner', 'profil', 'struktur_organisasi'].includes(sheetName);
-
-    fields.forEach(field => {
-        const currentValue = field.type === 'date' ? dateToInput(record[field.name]) : record[field.name] || '';
-        let inputField = '';
-        const requiredAttr = field.required ? 'required' : '';
-        const defaultValue = field.default !== undefined ? field.default : '';
-
-        if (field.type === 'select') {
-            inputField = `<select id="${field.name}" name="${field.name}" ${requiredAttr}>`;
-            field.options.forEach(option => {
-                const selected = option === currentValue ? 'selected' : '';
-                inputField += `<option value="${option}" ${selected}>${option}</option>`;
-            });
-            inputField += `</select>`;
-        } else if (field.type === 'textarea') {
-             inputField = `<textarea id="${field.name}" name="${field.name}" class="text-area-wide" ${requiredAttr}>${currentValue}</textarea>`;
-        } else if (field.type === 'file') {
-            const currentImgUrl = currentValue.includes('http') ? currentValue : '';
-            inputField = `
-                <input type="file" id="${field.name}" name="${field.name}" accept="image/*" ${field.required && !currentImgUrl ? 'required' : ''}>
-                ${currentImgUrl ? `<img src="${currentImgUrl}" alt="Current Image" class="image-preview-small"><p>Abaikan jika tidak ingin ganti gambar.</p><input type="hidden" name="existing_${field.name}" value="${currentImgUrl}">` : ''}
-            `;
+    cards.forEach(card => {
+        const searchContent = card.dataset.search;
+        if (searchContent && searchContent.includes(searchInput)) {
+            card.classList.remove('d-none');
         } else {
-            const valueToUse = currentValue || defaultValue;
-            inputField = `<input type="${field.type}" id="${field.name}" name="${field.name}" value="${valueToUse}" ${field.readonly ? 'readonly' : ''} ${requiredAttr} ${field.type === 'number' ? 'min="0"' : ''}>`;
+            card.classList.add('d-none');
         }
+    });
+}
 
-        html += `
-            <div class="form-group">
-                <label for="${field.name}">${field.label} ${field.required ? '<span style="color:red;">*</span>' : ''}</label>
-                ${inputField}
+// --- [ RENDERING DATA ] -------------------------------------------------------------------------
+
+async function loadDataAndRender(sheetName, renderFunction) {
+    const list = await fetchAPI(sheetName, 'READ');
+    if (list) {
+        ALL_DATA[sheetName] = list;
+        renderFunction(list);
+    }
+}
+
+function loadHomePageData() { loadDataAndRender('berita_home', renderBerita); }
+function loadKompetisi() { loadDataAndRender('kompetisi', renderKompetisi); }
+function loadKlub() { loadDataAndRender('klub', renderKlub); }
+
+
+function renderBerita(data) {
+    const listContainer = document.getElementById('berita-list');
+    listContainer.innerHTML = '';
+    if (data.length === 0) { listContainer.innerHTML = '<div class="col-12"><p class="text-center text-muted">Belum ada berita.</p></div>'; return; }
+
+    data.forEach(item => {
+        const date = item.tanggal || 'Tanggal Tidak Diketahui';
+        const card = `
+            <div class="col-12 col-md-6 col-lg-4 mb-4 data-card" data-sheet="berita_home" data-search="${item.Judul_Berita.toLowerCase()} ${item.isi_berita.toLowerCase()}">
+                <div class="card shadow-sm h-100">
+                    <img src="${item.gambar_1 || 'https://via.placeholder.com/400x200?text=No+Image'}" class="card-img-top" alt="${item.Judul_Berita}" style="height:200px; object-fit:cover;">
+                    <div class="card-body d-flex flex-column">
+                        <small class="text-muted">${date} | ID: ${item.id_berita}</small>
+                        <h5 class="card-title">${item.Judul_Berita}</h5>
+                        <p class="card-text flex-grow-1">${item.isi_berita.substring(0, 100)}...</p>
+                        <div class="mt-auto pt-2 border-top">
+                            <button class="btn btn-sm btn-warning me-2" onclick="editData('berita_home', '${item.id_berita}', 'id_berita')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="confirmDelete('berita_home', '${item.id_berita}')">Hapus</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         `;
+        listContainer.innerHTML += card;
     });
-    
-    const idField = fields.find(f => f.isId);
-    if (idField && record[idField.name]) {
-        html += `<input type="hidden" name="${idField.name}" value="${record[idField.name]}">`;
-    }
-    
-    html += `<button type="submit" class="btn btn-primary">Simpan</button>`;
-    
-    if (idField && record[idField.name] && !isEditingFixed) {
-         html += `<button type="button" class="btn btn-danger" id="delete-btn" style="margin-left: 10px;">Hapus</button>`;
-    }
+}
 
-    crudForm.innerHTML = html;
-    crudForm.setAttribute('data-sheet', sheetName);
-    crudModal.style.display = 'block';
+function renderKompetisi(data) {
+    const listContainer = document.getElementById('kompetisi-list');
+    listContainer.innerHTML = '';
+    if (data.length === 0) { listContainer.innerHTML = '<div class="col-12"><p class="text-center text-muted">Belum ada data kompetisi.</p></div>'; return; }
 
-    if (document.getElementById('delete-btn')) {
-        document.getElementById('delete-btn').onclick = () => {
-            showConfirmation('Yakin ingin menghapus data ini?', (isConfirmed) => {
-                if (isConfirmed) {
-                    handleFormSubmit(sheetName, 'DELETE', record);
-                }
-            });
-        };
+    data.forEach(item => {
+        const date = item.tanggal || 'Tgl Tidak Ada';
+        const searchString = `${item.nama_kompetisi} ${item.nama_klub1} ${item.nama_klub2} ${item.lokasi}`.toLowerCase();
+        const card = `
+            <div class="col-12 mb-3 data-card" data-sheet="kompetisi" data-search="${searchString}">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-primary text-white text-center">
+                        <small class="fw-bold">${item.jenis_pertandingan}</small>
+                        <h6 class="mb-0">${item.nama_kompetisi} - ${date}</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center align-items-center">
+                            <div class="col-4">
+                                <img src="${item.logo_klub1 || 'https://via.placeholder.com/50'}" class="img-fluid mb-1" style="height:50px; object-fit:contain;">
+                                <p class="mb-0 fw-bold">${item.nama_klub1}</p>
+                            </div>
+                            <div class="col-4">
+                                <h2 class="fw-bolder text-primary">${item.goal1} - ${item.goal2}</h2>
+                                <small class="text-muted d-block">${item.lokasi}</small>
+                            </div>
+                            <div class="col-4">
+                                <img src="${item.logo_klub2 || 'https://via.placeholder.com/50'}" class="img-fluid mb-1" style="height:50px; object-fit:contain;">
+                                <p class="mb-0 fw-bold">${item.nama_klub2}</p>
+                            </div>
+                        </div>
+                        <div class="mt-3 border-top pt-2">
+                             <small class="d-block text-center text-muted">Kartu Kuning: ${item.kartu_kuning1} vs ${item.kartu_kuning2} | Merah: ${item.kartu_merah1} vs ${item.kartu_merah2}</small>
+                        </div>
+                        <div class="text-center mt-3">
+                             <button class="btn btn-sm btn-warning me-2" onclick="editData('kompetisi', '${item.id_pertandingan}', 'id_pertandingan')">Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="confirmDelete('kompetisi', '${item.id_pertandingan}')">Hapus</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        listContainer.innerHTML += card;
+    });
+}
+
+function renderKlub(data) {
+    const listContainer = document.getElementById('klub-list');
+    listContainer.innerHTML = '';
+    if (data.length === 0) { listContainer.innerHTML = '<div class="col-12"><p class="text-center text-muted">Belum ada data klub.</p></div>'; return; }
+
+    data.forEach(item => {
+        const searchString = `${item.nama_klub} ${item.julukan} ${item.manejer} ${item.pelatih}`.toLowerCase();
+        const card = `
+            <div class="col-12 col-md-6 mb-4 data-card" data-sheet="klub" data-search="${searchString}">
+                <div class="card shadow-sm h-100">
+                    <div class="card-body d-flex">
+                        <img src="${item.logo_klub || 'https://via.placeholder.com/80'}" alt="${item.nama_klub}" class="me-3 rounded-circle" style="width: 80px; height: 80px; object-fit: contain; border: 1px solid #ddd;">
+                        <div class="flex-grow-1">
+                            <h5 class="card-title mb-0">${item.nama_klub} <span class="badge bg-secondary">${item.julukan}</span></h5>
+                            <small class="text-muted">Berdiri: ${item.tanggal_berdiri || 'N/A'}</small><br>
+                            <small>Manajer: **${item.manejer || '-'}** | Pelatih: **${item.pelatih || '-'}**</small>
+                            <p class="text-xs mb-0 mt-1">Alamat: ${item.alamat.substring(0, 50)}...</p>
+                        </div>
+                    </div>
+                    <div class="card-footer d-flex justify-content-end">
+                        <button class="btn btn-sm btn-warning me-2" onclick="editData('klub', '${item.id_klub}', 'id_klub')">Edit</button>
+                        <button class="btn btn-sm btn-danger" onclick="confirmDelete('klub', '${item.id_klub}')">Hapus</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        listContainer.innerHTML += card;
+    });
+}
+
+
+// --- [ CRUD HANDLERS ] --------------------------------------------------------------------------
+
+function resetForm(formId) {
+    const form = document.getElementById(formId);
+    form.reset();
+    form.querySelectorAll('input[type="file"]').forEach(input => { input.value = ''; });
+
+    const idMap = { 'beritaForm': 'id_berita', 'kompetisiForm': 'id_pertandingan', 'klubForm': 'id_klub' };
+    const modalMap = { 'beritaForm': { modal: beritaModal, label: 'beritaModalLabel', title: 'Tambah Berita Baru' },
+                       'kompetisiForm': { modal: kompetisiModal, label: 'kompetisiModalLabel', title: 'Tambah Kompetisi Baru' },
+                       'klubForm': { modal: klubModal, label: 'klubModalLabel', title: 'Tambah Klub Baru' } };
+
+    if (idMap[formId]) {
+        document.getElementById(idMap[formId]).value = '';
+        document.getElementById(modalMap[formId].label).textContent = modalMap[formId].title;
+        modalMap[formId].modal.hide();
     }
 }
 
-// --- CRUD Submission Handler ---
-
-async function handleFormSubmit(sheetName, method, initialRecord = {}) {
-    const requiredFields = FORM_DEFINITIONS[sheetName].filter(f => f.required);
-    let isValid = true;
+async function editData(sheetName, id, idColName) {
+    const dataToEdit = ALL_DATA[sheetName].find(item => item[idColName] === id);
+    if (!dataToEdit) { showToast("Data tidak ditemukan di cache.", false); return; }
     
-    for (const field of requiredFields) {
-        const element = crudForm.querySelector(`[name="${field.name}"]`);
-        if (element) {
-            let value = element.value.trim();
-            if (field.type === 'file') {
-                const existingHidden = crudForm.querySelector(`input[name="existing_${field.name}"]`);
-                if ((method === 'CREATE' && element.files.length === 0) || 
-                    (method === 'UPDATE' && field.required && !existingHidden?.value && element.files.length === 0)) {
-                     isValid = false;
-                     showToast(`Gambar ${field.label} wajib diisi.`);
-                     break;
-                }
-            } else if (value === '' && !field.readonly) {
-                isValid = false;
-                showToast(`${field.label} wajib diisi.`);
-                break;
-            }
+    let formId, modal, modalLabelId;
+    if (sheetName === 'berita_home') { formId = 'beritaForm'; modal = beritaModal; modalLabelId = 'beritaModalLabel'; } 
+    else if (sheetName === 'kompetisi') { formId = 'kompetisiForm'; modal = kompetisiModal; modalLabelId = 'kompetisiModalLabel'; } 
+    else if (sheetName === 'klub') { formId = 'klubForm'; modal = klubModal; modalLabelId = 'klubModalLabel'; } else { return; }
+
+    resetForm(formId);
+    document.getElementById(modalLabelId).textContent = `Edit Data ID: ${id}`;
+    
+    const form = document.getElementById(formId);
+    for (const key in dataToEdit) {
+        const input = form.querySelector(`[name="${key}"]`);
+        if (input) {
+            if (input.type === 'date') { input.value = formatDateForInput(dataToEdit[key]); }
+            else if (input.type !== 'file') { input.value = dataToEdit[key]; }
+        }
+        
+        if (key.startsWith('id_') || key.startsWith('logo_') || key.startsWith('gambar_') || key.startsWith('poto-')) {
+             const hiddenInput = form.querySelector(`[name="${key}Hidden"]`);
+             if(hiddenInput) hiddenInput.value = dataToEdit[key];
+             if(key.startsWith('id_')) input.value = dataToEdit[key]; // set ID field
         }
     }
+    modal.show();
+}
 
-    if (!isValid) return;
-
-    showLoading();
-    crudModal.style.display = 'none';
-
-    let record = {};
-    const formElements = crudForm.elements;
+function confirmDelete(sheetName, id) {
+    const deleteBtn = document.getElementById('confirmDeleteBtn');
     
-    for (let i = 0; i < formElements.length; i++) {
-        const element = formElements[i];
-        if (element.name && element.type !== 'submit' && element.type !== 'button') {
-            const fieldDef = FORM_DEFINITIONS[sheetName].find(f => f.name === element.name);
+    deleteBtn.replaceWith(deleteBtn.cloneNode(true));
+    const newDeleteBtn = document.getElementById('confirmDeleteBtn');
+
+    newDeleteBtn.addEventListener('click', async () => {
+        confirmModal.hide();
+        const result = await fetchAPI(sheetName, 'DELETE', { id: id });
+        if (result) {
+            if (sheetName === 'berita_home') loadHomePageData();
+            if (sheetName === 'kompetisi') loadKompetisi();
+            if (sheetName === 'klub') loadKlub();
+        }
+    }, { once: true });
+
+    document.getElementById('confirmModalBody').textContent = `Apakah Anda yakin ingin menghapus data ${sheetName} dengan ID: ${id}?`;
+    confirmModal.show();
+}
+
+async function handleFormSubmit(event, sheetName, action) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const data = {};
+    let uploadPromises = [];
+    let isUpdateOperation = action === 'UPDATE';
+
+    for (const [key, value] of formData.entries()) {
+        if (value instanceof File && value.name) {
+            if (key.endsWith('Hidden')) continue;
             
-            if (element.type === 'file' && element.files.length > 0) {
-                record[element.name] = await getBase64Image(element.files[0]);
-            } else if (element.name.startsWith('existing_')) {
-                record[element.name.replace('existing_', '')] = element.value;
-            } else if (element.type !== 'file') {
-                if (fieldDef && fieldDef.type === 'number' && element.value === '') {
-                     record[element.name] = fieldDef.default !== undefined ? String(fieldDef.default) : '';
-                } else {
-                     record[element.name] = element.value.trim();
+            if (key.startsWith('logo_') || key.startsWith('gambar_') || key.startsWith('poto-')) {
+                if (value.size > 0) {
+                     uploadPromises.push(uploadImage(value).then(url => ({ key: key, url: url })));
+                } else if (isUpdateOperation) {
+                     const oldValue = form.querySelector(`[name="${key}Hidden"]`)?.value || '';
+                     data[key] = oldValue;
                 }
             }
+        } else if (!(value instanceof File) && !key.endsWith('Hidden')) {
+            data[key] = value;
         }
     }
     
-    if (record.tanggal) record.tanggal = dateToSheet(record.tanggal);
-    if (record.tanggal_berdiri) record.tanggal_berdiri = dateToSheet(record.tanggal_berdiri);
+    const uploadedUrls = await Promise.all(uploadPromises);
+    for (const { key, url } of uploadedUrls) {
+        if (url) {
+            data[key] = url;
+        } else if (isUpdateOperation) {
+            const oldValue = form.querySelector(`[name="${key}Hidden"]`)?.value || '';
+            if (oldValue && oldValue.startsWith('http')) {
+                data[key] = oldValue;
+            } else if(form.querySelector(`[name="${key}"][required]`)) {
+                showToast(`Unggahan gambar ${key} gagal dan tidak ada URL lama. Operasi dibatalkan.`, false);
+                return; 
+            }
+        } else if(form.querySelector(`[name="${key}"][required]`)) {
+             showToast(`Unggahan gambar ${key} gagal. Operasi dibatalkan.`, false);
+             return; 
+        }
+    }
+    
+    const result = await fetchAPI(sheetName, action, data);
+    
+    if (result) {
+        if (sheetName === 'berita_home') loadHomePageData();
+        if (sheetName === 'kompetisi') loadKompetisi();
+        if (sheetName === 'klub') loadKlub();
+        
+        if (['kepala_halaman', 'banner', 'profil', 'struktur_organisasi'].includes(sheetName)) {
+            loadStaticData(); 
+            loadSettingData(sheetName); 
+        }
 
-    let finalPayload = (method === 'UPDATE' || method === 'DELETE') ? {...initialRecord, ...record} : record;
-    
-    const payload = {
-        sheetName: sheetName,
-        method: method,
-        record: finalPayload
-    };
-    
-    try {
-        const response = await fetchApi(sheetName, 'POST', payload);
-        showToast(response.message);
-        const activeNav = document.querySelector('.nav-item.active');
-        if (activeNav) loadPage(activeNav.dataset.page);
-    } catch (error) {
-        console.error("CRUD Error:", error);
-        showToast(`Error: ${error.message}`);
-    } finally {
-        hideLoading();
+        resetForm(form.id);
     }
 }
 
 
-// --- Page Render Functions --- (Disederhanakan untuk kode final)
+// --- [ PENGATURAN / SETTING ] --------------------------------------------------------------------
 
-function renderHomePage(data) {
-    const listHtml = data.map(item => `
-        <div class="list-item berita-item" data-id="${item.id_berita}">
-            <div class="item-header">${item.Judul_Berita} (${item.tanggal})</div>
-            <div class="item-details">
-                <p>${item.isi_berita.substring(0, 100)}...</p>
-                ${item.gambar_1 ? `<img src="${item.gambar_1}" alt="Gambar Berita" class="image-preview">` : ''}
-            </div>
-            <div class="item-actions">
-                <button class="btn btn-secondary btn-edit" data-id="${item.id_berita}" data-sheet="berita_home">Edit</button>
-            </div>
-        </div>
-    `).join('');
-
-    appContent.innerHTML = `<div class="page-container"><div class="search-container"><input type="text" id="search-berita" placeholder="Cari Berita..."><button class="btn btn-primary" id="add-berita-btn"><i class="fas fa-plus"></i> Tambah Berita</button></div><div class="data-list" id="berita-list">${listHtml}</div></div>`;
-
-    document.getElementById('add-berita-btn').onclick = () => { formTitle.textContent = 'Tambah Berita Baru'; createFormFields('berita_home'); };
-    document.getElementById('search-berita').addEventListener('input', (e) => filterList('berita_home', e.target.value, ['Judul_Berita', 'isi_berita']));
-    document.querySelectorAll('.btn-edit[data-sheet="berita_home"]').forEach(btn => {
-        btn.onclick = () => {
-            const id = btn.dataset.id;
-            const record = data.find(item => item.id_berita === id);
-            formTitle.textContent = 'Edit Berita';
-            createFormFields('berita_home', record);
-        };
-    });
+function loadSettingInitialData() {
+    loadStaticData(); 
+    const activeSetting = document.querySelector('.btn-setting.active')?.dataset.targetSheet || 'kepala_halaman';
+    loadSettingData(activeSetting);
 }
 
-function renderKompetisiPage(data) {
-    const listHtml = data.map(item => `
-        <div class="list-item kompetisi-item" data-id="${item.id_pertandingan}">
-            <div class="item-header">${item.nama_kompetisi} - ${item.jenis_pertandingan} (${item.tanggal})</div>
-            <p>Lokasi: <strong>${item.lokasi}</strong></p>
-            <div class="klub-matchup" style="display: flex; align-items: center; justify-content: space-between; margin: 10px 0; border: 1px solid #eee; padding: 10px; border-radius: 5px;">
-                <div style="text-align: center; flex: 1;">
-                    ${item.logo_klub1 ? `<img src="${item.logo_klub1}" alt="Logo Klub 1" class="image-preview-small">` : ''}
-                    <p><strong>${item.nama_klub1}</strong></p>
-                </div>
-                <div style="text-align: center; flex: 0 0 80px;"><span style="font-size: 1.5em; font-weight: bold;">${item.goal1 || 0} - ${item.goal2 || 0}</span></div>
-                <div style="text-align: center; flex: 1;">
-                    ${item.logo_klub2 ? `<img src="${item.logo_klub2}" alt="Logo Klub 2" class="image-preview-small">` : ''}
-                    <p><strong>${item.nama_klub2}</strong></p>
-                </div>
-            </div>
-            <div class="item-actions">
-                <button class="btn btn-secondary btn-edit" data-id="${item.id_pertandingan}" data-sheet="kompetisi">Detail / Edit</button>
-            </div>
-        </div>
-    `).join('');
-
-    appContent.innerHTML = `<div class="page-container"><div class="search-container"><input type="text" id="search-kompetisi" placeholder="Cari Kompetisi..."><button class="btn btn-primary" id="add-kompetisi-btn"><i class="fas fa-plus"></i> Tambah Kompetisi</button></div><div class="data-list" id="kompetisi-list">${listHtml}</div></div>`;
-
-    document.getElementById('add-kompetisi-btn').onclick = () => { formTitle.textContent = 'Tambah Data Kompetisi'; createFormFields('kompetisi'); };
-    document.getElementById('search-kompetisi').addEventListener('input', (e) => filterList('kompetisi', e.target.value, ['nama_kompetisi', 'jenis_pertandingan', 'nama_klub1', 'nama_klub2', 'lokasi']));
-    document.querySelectorAll('.btn-edit[data-sheet="kompetisi"]').forEach(btn => {
-        btn.onclick = () => {
-            const id = btn.dataset.id;
-            const record = data.find(item => item.id_pertandingan === id);
-            formTitle.textContent = 'Edit Data Kompetisi';
-            createFormFields('kompetisi', record);
-        };
-    });
-}
-
-function renderKlubPage(data) {
-    const listHtml = data.map(item => `
-        <div class="list-item klub-item" data-id="${item.id_klub}">
-            <div style="display: flex; align-items: center; width: 100%;">
-                ${item.logo_klub ? `<img src="${item.logo_klub}" alt="Logo Klub" class="image-preview-small">` : ''}
-                <div style="flex-grow: 1;"><div class="item-header">${item.nama_klub} (${item.julukan})</div><p>Berdiri: ${item.tanggal_berdiri}</p><p>Manajer: ${item.manejer}</p></div>
-            </div>
-            <div class="item-actions">
-                <button class="btn btn-secondary btn-edit" data-id="${item.id_klub}" data-sheet="klub">Detail / Edit</button>
-            </div>
-        </div>
-    `).join('');
-
-    appContent.innerHTML = `<div class="page-container"><div class="search-container"><input type="text" id="search-klub" placeholder="Cari Klub..."><button class="btn btn-primary" id="add-klub-btn"><i class="fas fa-plus"></i> Tambah Klub</button></div><div class="data-list klub-list" id="klub-list">${listHtml}</div></div>`;
-
-    document.getElementById('add-klub-btn').onclick = () => { formTitle.textContent = 'Tambah Klub Baru'; createFormFields('klub'); };
-    document.getElementById('search-klub').addEventListener('input', (e) => filterList('klub', e.target.value, ['nama_klub', 'julukan', 'manejer', 'pelatih']));
-    document.querySelectorAll('.btn-edit[data-sheet="klub"]').forEach(btn => {
-        btn.onclick = () => {
-            const id = btn.dataset.id;
-            const record = data.find(item => item.id_klub === id);
-            formTitle.textContent = 'Edit Data Klub';
-            createFormFields('klub', record);
-        };
-    });
-}
-
-function renderSettingPage(data) {
-    const kepalaData = data.kepala_halaman[0] || {};
-    const profilData = data.profil[0] || {};
-    const strukturData = data.struktur_organisasi[0] || {};
-
-    appContent.innerHTML = `
-        <div class="page-container"><h2>Pengaturan Website</h2><div class="data-list">
-            <div class="list-item"><div class="item-header">Kepala Halaman (Header)</div><p>Judul: <strong>${kepalaData.judul_kepala || '-'}</strong></p><p>Logo PSSI: <img src="${kepalaData.logo_pssi}" class="image-preview-small"></p><div class="item-actions"><button class="btn btn-secondary btn-setting-edit" data-sheet="kepala_halaman">Edit</button></div></div>
-            <div class="list-item"><div class="item-header">Banner Foto (Poto-1, Poto-2, Poto-3)</div><div class="item-actions"><button class="btn btn-secondary btn-setting-edit" data-sheet="banner">Edit</button></div></div>
-            <div class="list-item"><div class="item-header">Profil Organisasi</div><p>Nama: <strong>${profilData.nama_organisasi || '-'}</strong></p><p>Visi: ${profilData.visi ? profilData.visi.substring(0, 50) + '...' : '-'}</p><div class="item-actions"><button class="btn btn-secondary btn-setting-edit" data-sheet="profil">Edit</button></div></div>
-            <div class="list-item"><div class="item-header">Struktur Organisasi</div><p>Ketua: <strong>${strukturData.ketua || '-'}</strong></p><div class="item-actions"><button class="btn btn-secondary btn-setting-edit" data-sheet="struktur_organisasi">Edit</button></div></div>
-        </div></div>
-    `;
+function loadSettingData(sheetName) {
+    document.querySelectorAll('.btn-setting').forEach(btn => btn.classList.remove('active'));
     
-    document.querySelectorAll('.btn-setting-edit').forEach(btn => {
-        btn.onclick = () => {
-            const sheetName = btn.dataset.sheet;
-            const record = data[sheetName][0] || {};
-            formTitle.textContent = `Edit Data ${sheetName.replace('_', ' ').toUpperCase()}`;
-            createFormFields(sheetName, record);
-        };
-    });
-}
-
-// --- Main Load Function ---
-
-async function loadPage(pageName) {
-    showLoading();
-    
-    const fixedSheets = ['kepala_halaman', 'banner', 'profil', 'struktur_organisasi'];
-    for (const sheet of fixedSheets) {
-        try {
-            currentSheetData[sheet] = (await fetchApi(sheet)).data;
-        } catch (e) {
-             currentSheetData[sheet] = [];
-        }
+    document.querySelectorAll('[id^="form-setting-"]').forEach(f => f.classList.add('d-none'));
+    const formElement = document.getElementById(`form-setting-${sheetName}`);
+    if (formElement) {
+        formElement.classList.remove('d-none');
+        document.querySelector(`.btn-setting[data-target-sheet="${sheetName}"]`).classList.add('active');
+        loadStaticDataToForm(sheetName);
     }
-    loadHeader();
-    
-    let renderData = [];
-    const dynamicSheets = { 'home': 'berita_home', 'kompetisi': 'kompetisi', 'klub': 'klub' };
+}
 
-    if (dynamicSheets[pageName]) {
-        const sheetToLoad = dynamicSheets[pageName];
-        try {
-            const response = await fetchApi(sheetToLoad);
-            renderData = response.data;
-            currentSheetData[sheetToLoad] = renderData;
-        } catch (error) {
-            showToast(`Gagal memuat data ${sheetToLoad}.`);
-            renderData = [];
-        }
-    } else if (pageName === 'setting') {
-        renderData = currentSheetData;
-    }
-    
-    switch (pageName) {
-        case 'home': renderHomePage(renderData); break;
-        case 'kompetisi': renderKompetisiPage(renderData); break;
-        case 'klub': renderKlubPage(renderData); break;
-        case 'setting': renderSettingPage(renderData); break;
+async function loadStaticDataToForm(sheetName) {
+    const data = ALL_DATA[sheetName];
+    if (!data) {
+        // Coba load lagi jika belum ada di cache
+        const freshData = await fetchAPI(sheetName, 'READ');
+        if (freshData) ALL_DATA[sheetName] = freshData;
+        else return;
     }
 
-    navItems.forEach(item => item.classList.remove('active'));
-    const activeNav = document.querySelector(`.nav-item[data-page="${pageName}"]`);
-    if(activeNav) activeNav.classList.add('active');
+    const form = document.getElementById(`${sheetName}Form`);
+    if (!form) return;
 
-    hideLoading();
-}
-
-// --- Filtering Function ---
-
-function filterList(sheetName, searchTerm, searchFields) {
-    const listContainer = document.getElementById(sheetName + '-list');
-    if (!listContainer) return;
-    
-    const data = currentSheetData[sheetName];
-    const normalizedSearch = searchTerm.toLowerCase();
-
-    const filteredData = data.filter(record => {
-        return searchFields.some(field => 
-            String(record[field]).toLowerCase().includes(normalizedSearch)
-        );
-    });
-
-    const allItems = listContainer.querySelectorAll('.list-item');
-    allItems.forEach(item => item.style.display = 'none');
-    
-    filteredData.forEach(record => {
-        const idField = sheetName === 'berita_home' ? 'id_berita' : 
-                        sheetName === 'kompetisi' ? 'id_pertandingan' : 'id_klub';
-        const itemElement = listContainer.querySelector(`[data-id="${record[idField]}"]`);
-        if (itemElement) {
-            itemElement.style.display = 'flex';
-            itemElement.style.flexDirection = 'column';
+    for (const key in data) {
+        const input = form.querySelector(`[name="${key}"]`);
+        if (input) {
+            if (input.type === 'date') { input.value = formatDateForInput(data[key]); }
+            else { input.value = data[key]; }
         }
-    });
-}
-
-
-// --- Event Listeners and Initial Load ---
-
-navItems.forEach(item => {
-    item.addEventListener('click', (e) => {
-        e.preventDefault();
-        const page = e.currentTarget.dataset.page;
-        if (window.location.hash.replace('#', '') !== page) {
-            history.pushState({ page: page }, '', `#${page}`);
-        }
-        loadPage(page);
-    });
-});
-
-crudModal.querySelector('.close-button').onclick = () => { crudModal.style.display = 'none'; };
-window.onclick = (event) => { if (event.target === crudModal || event.target === confirmModal) { event.target.style.display = 'none'; } };
-
-crudForm.onsubmit = async (e) => {
-    e.preventDefault();
-    const sheetName = crudForm.getAttribute('data-sheet');
-    const idField = FORM_DEFINITIONS[sheetName].find(f => f.isId);
-    const existingId = idField ? crudForm.querySelector(`input[name="${idField.name}"]`)?.value : null;
-
-    const isFixedSheet = ['kepala_halaman', 'banner', 'profil', 'struktur_organisasi'].includes(sheetName);
-    
-    let method = 'CREATE';
-    let initialRecord = {};
-
-    if (existingId || isFixedSheet) {
-        method = 'UPDATE';
-        if (idField && existingId) {
-             initialRecord = currentSheetData[sheetName].find(r => r[idField.name] === existingId) || {};
-        } else if (isFixedSheet) {
-             initialRecord = currentSheetData[sheetName][0] || {};
+        
+        // Set hidden field untuk gambar statis
+        if (key.startsWith('logo_') || key.startsWith('poto-')) {
+             const hiddenInput = form.querySelector(`[name="${key}Hidden"]`);
+             if(hiddenInput) hiddenInput.value = data[key];
         }
     }
+}
+
+
+// --- [ INIALISASI APLIKASI ] ----------------------------------------------------------------------
+
+function init() {
+    // 1. Setup Navigasi Bawah
+    navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            navigateTo(link.dataset.page);
+        });
+    });
     
-    await handleFormSubmit(sheetName, method, initialRecord);
-};
+    // 2. Setup Navigasi Setting
+    document.querySelectorAll('.btn-setting').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            loadSettingData(e.target.dataset.targetSheet);
+        });
+    });
+    
+    // 3. Penanganan Back Button (Popstate)
+    window.addEventListener('popstate', (e) => {
+        if (e.state && e.state.page) {
+            navigateTo(e.state.page, true);
+        } else {
+            if (currentPageId !== 'home-page') {
+                 navigateTo('home-page', true);
+            }
+        }
+    });
+    
+    // 4. Muat data statis dan halaman default
+    loadStaticData().then(() => {
+        const initialPageHash = window.location.hash.substring(1);
+        const initialPage = (initialPageHash ? initialPageHash + '-page' : 'home-page');
+        navigateTo(initialPage);
+    });
+}
 
-window.onpopstate = (event) => {
-    const page = (event.state && event.state.page) ? event.state.page : 'home';
-    loadPage(page);
-};
-
-document.addEventListener('DOMContentLoaded', () => {
-    const initialPage = window.location.hash.replace('#', '') || 'home';
-    loadPage(initialPage);
-    history.replaceState({ page: initialPage }, '', `#${initialPage}`);
-});
+window.onload = init;
