@@ -3,208 +3,325 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ASKAB PSSI Mentawai - Admin Dashboard</title>
+    <title>ASKAB PSSI KEPULAUAN MENTAWAI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    
-    <style>
-        /* CSS penting disematkan di sini karena styling umum ada di style.css */
-        
-        /* Modal Style */
-        .modal {
-            display: none; 
-            position: fixed; 
-            z-index: 100; 
-            left: 0;
-            top: 0;
-            width: 100%; 
-            height: 100%; 
-            overflow: auto; 
-            background-color: rgb(0,0,0); 
-            background-color: rgba(0,0,0,0.4); 
-            padding-top: 60px;
-        }
-
-        .modal-content {
-            background-color: #fefefe;
-            margin: 5% auto; 
-            padding: 20px;
-            border: 1px solid #888;
-            width: 90%;
-            max-width: 600px;
-            border-radius: 8px;
-            position: relative;
-        }
-
-        .close-button {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-        }
-
-        .close-button:hover,
-        .close-button:focus {
-            color: #000;
-            text-decoration: none;
-            cursor: pointer;
-        }
-
-        /* Form Styling */
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-
-        .form-group input:not([type="file"]), 
-        .form-group select, 
-        .form-group textarea {
-            width: 100%;
-            padding: 8px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        
-        .text-area-wide {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        /* Loading Spinner */
-        #loading-spinner {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(255, 255, 255, 0.8);
-            display: none; 
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
-
-        .spinner {
-            border: 8px solid #f3f3f3; 
-            border-top: 8px solid #4CAF50; 
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        /* Toast Notification */
-        #toast-notification {
-            visibility: hidden; 
-            min-width: 250px;
-            background-color: #333;
-            color: #fff;
-            text-align: center;
-            border-radius: 2px;
-            padding: 16px;
-            position: fixed;
-            z-index: 1001;
-            right: 30px;
-            bottom: 30px;
-            font-size: 17px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-        }
-
-        #toast-notification.show {
-            visibility: visible;
-            -webkit-animation: fadein 0.5s, fadeout 0.5s 2.5s;
-            animation: fadein 0.5s, fadeout 0.5s 2.5s;
-        }
-
-        @-webkit-keyframes fadein {
-            from {bottom: 0; opacity: 0;} 
-            to {bottom: 30px; opacity: 1;}
-        }
-
-        @keyframes fadein {
-            from {bottom: 0; opacity: 0;}
-            to {bottom: 30px; opacity: 1;}
-        }
-
-        @-webkit-keyframes fadeout {
-            from {bottom: 30px; opacity: 1;} 
-            to {bottom: 0; opacity: 0;}
-        }
-
-        @keyframes fadeout {
-            from {bottom: 30px; opacity: 1;}
-            to {bottom: 0; opacity: 0;}
-        }
-        
-        /* Confirmation Modal */
-        #confirmation-modal .modal-content {
-            max-width: 400px;
-            text-align: center;
-        }
-        
-        #confirmation-modal .modal-footer {
-            margin-top: 20px;
-            display: flex;
-            justify-content: space-around;
-        }
-    </style>
 </head>
 <body>
-    <div id="app-container">
-        <header id="app-header">
-            </header>
-        
-        <nav id="app-nav">
-            <a href="#home" class="nav-item active" data-page="home"><i class="fas fa-newspaper"></i> Berita</a>
-            <a href="#kompetisi" class="nav-item" data-page="kompetisi"><i class="fas fa-trophy"></i> Kompetisi</a>
-            <a href="#klub" class="nav-item" data-page="klub"><i class="fas fa-shield-alt"></i> Data Klub</a>
-            <a href="#setting" class="nav-item" data-page="setting"><i class="fas fa-cog"></i> Pengaturan</a>
-        </nav>
-        
-        <main id="app-content">
-            </main>
-        
-        <footer>
-            &copy; 2024 ASKAB PSSI Kepulauan Mentawai. Dashboard Admin.
-        </footer>
-    </div>
-    
-    <div id="crud-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-button">&times;</span>
-            <h2 id="form-title">Form Data</h2>
-            <form id="crud-form">
-                </form>
+
+    <div id="loading-overlay" class="loading-overlay d-none">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
         </div>
     </div>
-    
-    <div id="confirmation-modal" class="modal">
-        <div class="modal-content">
-            <h3 id="confirm-message">Yakin ingin menghapus data ini?</h3>
-            <div class="modal-footer">
-                <button class="btn btn-danger" id="confirm-yes">Ya, Hapus</button>
-                <button class="btn btn-secondary" id="confirm-no">Batal</button>
+
+    <div class="toast-container position-fixed top-0 start-50 translate-middle-x p-3">
+        <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-primary text-white">
+                <strong class="me-auto" id="toast-title">Notifikasi</strong>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body" id="toast-body">
+                Pesan akan muncul di sini.
             </div>
         </div>
     </div>
 
-    <div id="loading-spinner">
-        <div class="spinner"></div>
-    </div>
-    
-    <div id="toast-notification"></div>
+    <main class="container-fluid p-0 mb-5">
+        
+        <header id="app-header" class="d-flex justify-content-between align-items-center p-2 bg-light border-bottom sticky-top">
+            <img id="logo_pssi" src="" alt="Logo PSSI" class="header-logo">
+            <h4 id="judul_kepala" class="text-center flex-grow-1 mx-2">ASKAB PSSI KEPULAUAN MENTAWAI</h4>
+            <img id="logo_askab" src="" alt="Logo ASKAB" class="header-logo">
+        </header>
 
+        <div id="home-page" class="page active p-3">
+            <h2>🏠 Berita & Info Terbaru</h2>
+            <div id="banner-carousel" class="carousel slide my-3" data-bs-ride="carousel">
+                <div class="carousel-inner" id="banner-inner">
+                </div>
+                <button class="carousel-control-prev" type="button" data-bs-target="#banner-carousel" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                </button>
+                <button class="carousel-control-next" type="button" data-bs-target="#banner-carousel" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                </button>
+            </div>
+            
+            <div class="input-group mb-3">
+                <input type="text" class="form-control" id="search-berita" placeholder="Cari Berita..." onkeyup="filterData('berita_home')">
+                <button class="btn btn-primary" onclick="resetForm('beritaForm')" data-bs-toggle="modal" data-bs-target="#beritaModal">Tambah Berita</button>
+            </div>
+            
+            <div id="berita-list" class="row">
+            </div>
+        </div>
+
+        <div id="kompetisi-page" class="page d-none p-3">
+            <h2>🏆 Jadwal & Hasil Kompetisi</h2>
+             <div class="input-group mb-3">
+                <input type="text" class="form-control" id="search-kompetisi" placeholder="Cari Kompetisi..." onkeyup="filterData('kompetisi')">
+                <button class="btn btn-primary" onclick="resetForm('kompetisiForm')" data-bs-toggle="modal" data-bs-target="#kompetisiModal">Tambah Kompetisi</button>
+            </div>
+            <div id="kompetisi-list" class="row">
+            </div>
+        </div>
+
+        <div id="klub-page" class="page d-none p-3">
+            <h2>⚽ Daftar Klub Anggota</h2>
+            <div class="input-group mb-3">
+                <input type="text" class="form-control" id="search-klub" placeholder="Cari Klub..." onkeyup="filterData('klub')">
+                <button class="btn btn-primary" onclick="resetForm('klubForm')" data-bs-toggle="modal" data-bs-target="#klubModal">Tambah Klub</button>
+            </div>
+            <div id="klub-list" class="row">
+            </div>
+        </div>
+
+        <div id="setting-page" class="page d-none p-3">
+            <h2>⚙️ Pengaturan ASKAB</h2>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <button class="btn btn-sm btn-outline-primary btn-setting" data-target-sheet="kepala_halaman">Kepala Halaman</button>
+                <button class="btn btn-sm btn-outline-primary btn-setting" data-target-sheet="banner">Banner</button>
+                <button class="btn btn-sm btn-outline-primary btn-setting" data-target-sheet="profil">Profil</button>
+                <button class="btn btn-sm btn-outline-primary btn-setting" data-target-sheet="struktur_organisasi">Struktur Organisasi</button>
+            </div>
+
+            <div id="form-setting-kepala_halaman" class="card p-3 my-3 d-none">
+                <h4>Edit Kepala Halaman</h4>
+                <form id="kepala_halamanForm" onsubmit="handleFormSubmit(event, 'kepala_halaman', 'UPDATE')">
+                    <div class="mb-3">
+                        <label for="kepala_halaman-judul_kepala" class="form-label">Judul Kepala</label>
+                        <input type="text" class="form-control" name="judul_kepala" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="kepala_halaman-logo_pssi" class="form-label">Logo PSSI (Upload Image)</label>
+                        <input type="file" accept="image/*" class="form-control" name="logo_pssi" placeholder="Unggah gambar ImgBB">
+                        <input type="hidden" name="logo_pssiHidden"> 
+                    </div>
+                    <div class="mb-3">
+                        <label for="kepala_halaman-logo_askab" class="form-label">Logo ASKAB (Upload Image)</label>
+                        <input type="file" accept="image/*" class="form-control" name="logo_askab" placeholder="Unggah gambar ImgBB">
+                        <input type="hidden" name="logo_askabHidden">
+                    </div>
+                    <button type="submit" class="btn btn-success">Simpan Perubahan</button>
+                </form>
+            </div>
+
+            <div id="form-setting-banner" class="card p-3 my-3 d-none">
+                <h4>Edit Banner</h4>
+                <form id="bannerForm" onsubmit="handleFormSubmit(event, 'banner', 'UPDATE')">
+                    <div class="mb-3">
+                        <label for="banner-poto-1" class="form-label">Foto Banner 1</label>
+                        <input type="file" accept="image/*" class="form-control" name="poto-1">
+                        <input type="hidden" name="poto-1Hidden">
+                    </div>
+                    <div class="mb-3">
+                        <label for="banner-poto-2" class="form-label">Foto Banner 2</label>
+                        <input type="file" accept="image/*" class="form-control" name="poto-2">
+                        <input type="hidden" name="poto-2Hidden">
+                    </div>
+                    <div class="mb-3">
+                        <label for="banner-poto-3" class="form-label">Foto Banner 3</label>
+                        <input type="file" accept="image/*" class="form-control" name="poto-3">
+                        <input type="hidden" name="poto-3Hidden">
+                    </div>
+                    <button type="submit" class="btn btn-success">Simpan Perubahan</button>
+                </form>
+            </div>
+
+            <div id="form-setting-profil" class="card p-3 my-3 d-none">
+                <h4>Edit Profil Organisasi</h4>
+                <form id="profilForm" onsubmit="handleFormSubmit(event, 'profil', 'UPDATE')">
+                    <div class="mb-3"> <label class="form-label">Nama Organisasi</label> <input type="text" class="form-control" name="nama_organisasi" required> </div>
+                    <div class="mb-3"> <label class="form-label">Tanggal Berdiri</label> <input type="date" class="form-control" name="tanggal_berdiri" required> </div>
+                    <div class="mb-3"> <label class="form-label">Visi</label> <textarea class="form-control" name="visi" rows="3" required></textarea> </div>
+                    <div class="mb-3"> <label class="form-label">Misi</label> <textarea class="form-control" name="misi" rows="5" required></textarea> </div>
+                    <button type="submit" class="btn btn-success">Simpan Perubahan</button>
+                </form>
+            </div>
+
+            <div id="form-setting-struktur_organisasi" class="card p-3 my-3 d-none">
+                <h4>Edit Struktur Organisasi</h4>
+                <form id="struktur_organisasiForm" onsubmit="handleFormSubmit(event, 'struktur_organisasi', 'UPDATE')">
+                    <div class="mb-3"> <label class="form-label">Ketua</label> <input type="text" class="form-control" name="ketua" required> </div>
+                    <div class="mb-3"> <label class="form-label">Wakil Ketua</label> <input type="text" class="form-control" name="wakil_ketua" required> </div>
+                    <div class="mb-3"> <label class="form-label">Sekretaris</label> <input type="text" class="form-control" name="sekretaris" required> </div>
+                    <div class="mb-3"> <label class="form-label">Bendahara</label> <input type="text" class="form-control" name="bendahara" required> </div>
+                    <div class="mb-3"> <label class="form-label">Humas</label> <input type="text" class="form-control" name="humas" required> </div>
+                    <div class="mb-3"> <label class="form-label">Media</label> <input type="text" class="form-control" name="media" required> </div>
+                    <button type="submit" class="btn btn-success">Simpan Perubahan</button>
+                </form>
+            </div>
+
+        </div>
+    </main>
+
+    <div class="modal fade" id="beritaModal" tabindex="-1" aria-labelledby="beritaModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="beritaModalLabel">Tambah Berita Baru</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="beritaForm" onsubmit="handleFormSubmit(event, 'berita_home', document.getElementById('id_berita').value ? 'UPDATE' : 'CREATE')">
+                        <input type="hidden" name="id_berita" id="id_berita">
+                        <div class="mb-3"> <label for="berita-tanggal" class="form-label">Tanggal</label> <input type="date" class="form-control" name="tanggal" required> </div>
+                        <div class="mb-3"> <label for="berita-judul_berita" class="form-label">Judul Berita</label> <input type="text" class="form-control" name="Judul_Berita" required> </div>
+                        <div class="mb-3"> <label for="berita-isi_berita" class="form-label">Isi Berita</label> <textarea class="form-control" name="isi_berita" rows="5" required></textarea> </div>
+                        <div class="mb-3"> <label for="berita-gambar_1" class="form-label">Gambar 1</label> <input type="file" accept="image/*" class="form-control" name="gambar_1" required> <input type="hidden" name="gambar_1Hidden"> </div>
+                        <div class="mb-3"> <label for="berita-gambar_2" class="form-label">Gambar 2</label> <input type="file" accept="image/*" class="form-control" name="gambar_2"> <input type="hidden" name="gambar_2Hidden"> </div>
+                        <div class="mb-3"> <label for="berita-gambar_3" class="form-label">Gambar 3</label> <input type="file" accept="image/*" class="form-control" name="gambar_3"> <input type="hidden" name="gambar_3Hidden"> </div>
+                        <button type="submit" class="btn btn-primary w-100">Simpan Berita</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="kompetisiModal" tabindex="-1" aria-labelledby="kompetisiModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="kompetisiModalLabel">Tambah Data Kompetisi</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="kompetisiForm" onsubmit="handleFormSubmit(event, 'kompetisi', document.getElementById('id_pertandingan').value ? 'UPDATE' : 'CREATE')">
+                        <input type="hidden" name="id_pertandingan" id="id_pertandingan">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nama Kompetisi</label>
+                                <select class="form-select" name="nama_kompetisi" required>
+                                    <option value="">Pilih...</option>
+                                    <option value="Liga Askab">Liga Askab</option>
+                                    <option value="Liga Bupati">Liga Bupati</option>
+                                    <option value="Liga Desa">Liga Desa</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Jenis Pertandingan</label>
+                                <select class="form-select" name="jenis_pertandingan" required>
+                                    <option value="">Pilih...</option>
+                                    <option value="Babak Fase Group">Babak Fase Group</option>
+                                    <option value="Babak Penyisihan">Babak Penyisihan</option>
+                                    <option value="Babak 16 Besar">Babak 16 Besar</option>
+                                    <option value="Babak Semifinal">Babak Semifinal</option>
+                                    <option value="Final">Final</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"> <label class="form-label">Tanggal</label> <input type="date" class="form-control" name="tanggal" required> </div>
+                            <div class="col-md-6 mb-3"> <label class="form-label">Lokasi</label> <input type="text" class="form-control" name="lokasi" required> </div>
+                        </div>
+                        <h6 class="mt-3 text-primary">Klub 1</h6>
+                        <div class="row">
+                            <div class="col-6 mb-3"><label class="form-label">Nama Klub</label><input type="text" class="form-control" name="nama_klub1" required></div>
+                            <div class="col-6 mb-3"><label class="form-label">Logo Klub</label><input type="file" accept="image/*" class="form-control" name="logo_klub1" required><input type="hidden" name="logo_klub1Hidden"></div>
+                            <div class="col-4 mb-3"><label class="form-label">Goal</label><input type="number" class="form-control" name="goal1" min="0" value="0" required></div>
+                            <div class="col-8 mb-3"><label class="form-label">Ket. Goal</label><input type="text" class="form-control" name="Ket_goal1"></div>
+                            <div class="col-4 mb-3"><label class="form-label">Kuning</label><input type="number" class="form-control" name="kartu_kuning1" min="0" value="0" required></div>
+                            <div class="col-8 mb-3"><label class="form-label">Ket. Kuning</label><input type="text" class="form-control" name="ket_kartu_kuning1"></div>
+                            <div class="col-4 mb-3"><label class="form-label">Merah</label><input type="number" class="form-control" name="kartu_merah1" min="0" value="0" required></div>
+                            <div class="col-8 mb-3"><label class="form-label">Ket. Merah</label><input type="text" class="form-control" name="ket_kartu_merah1"></div>
+                        </div>
+                        <h6 class="mt-3 text-danger">Klub 2</h6>
+                        <div class="row">
+                            <div class="col-6 mb-3"><label class="form-label">Nama Klub</label><input type="text" class="form-control" name="nama_klub2" required></div>
+                            <div class="col-6 mb-3"><label class="form-label">Logo Klub</label><input type="file" accept="image/*" class="form-control" name="logo_klub2" required><input type="hidden" name="logo_klub2Hidden"></div>
+                            <div class="col-4 mb-3"><label class="form-label">Goal</label><input type="number" class="form-control" name="goal2" min="0" value="0" required></div>
+                            <div class="col-8 mb-3"><label class="form-label">Ket. Goal</label><input type="text" class="form-control" name="Ket_goal2"></div>
+                            <div class="col-4 mb-3"><label class="form-label">Kuning</label><input type="number" class="form-control" name="kartu_kuning2" min="0" value="0" required></div>
+                            <div class="col-8 mb-3"><label class="form-label">Ket. Kuning</label><input type="text" class="form-control" name="ket_kartu_kuning2"></div>
+                            <div class="col-4 mb-3"><label class="form-label">Merah</label><input type="number" class="form-control" name="kartu_merah2" min="0" value="0" required></div>
+                            <div class="col-8 mb-3"><label class="form-label">Ket. Merah</label><input type="text" class="form-control" name="ket_kartu_merah2"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-3">Simpan Kompetisi</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="klubModal" tabindex="-1" aria-labelledby="klubModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="klubModalLabel">Tambah Data Klub</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="klubForm" onsubmit="handleFormSubmit(event, 'klub', document.getElementById('id_klub').value ? 'UPDATE' : 'CREATE')">
+                        <input type="hidden" name="id_klub" id="id_klub">
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Nama Klub</label><input type="text" class="form-control" name="nama_klub" required></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Julukan</label><input type="text" class="form-control" name="julukan" required></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Tanggal Berdiri</label><input type="date" class="form-control" name="tanggal_berdiri" required></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">No. HP Klub</label><input type="tel" class="form-control" name="no_handphone_klub" required></div>
+                        </div>
+                        <div class="mb-3"><label class="form-label">Alamat</label><textarea class="form-control" name="alamat" rows="2" required></textarea></div>
+                        <h6 class="mt-3">Staf Tim</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label class="form-label">Manajer</label><input type="text" class="form-control" name="manejer"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Asisten Manajer</label><input type="text" class="form-control" name="asisten_manejer"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Pelatih</label><input type="text" class="form-control" name="pelatih"></div>
+                            <div class="col-md-6 mb-3"><label class="form-label">Asisten Pelatih</label><input type="text" class="form-control" name="asisten_pelatih"></div>
+                            <div class="col-12 mb-3"><label class="form-label">Staf Lainnya</label><input type="text" class="form-control" name="staff_lainnya"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Logo Klub</label>
+                            <input type="file" accept="image/*" class="form-control" name="logo_klub" required>
+                            <input type="hidden" name="logo_klubHidden">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 mt-3">Simpan Klub</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="confirmModalLabel">Konfirmasi Hapus</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="confirmModalBody">
+                    Apakah Anda yakin ingin menghapus data ini?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Hapus</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <nav class="fixed-bottom navbar navbar-light bg-light border-top">
+        <div class="container-fluid justify-content-around">
+            <a href="#" class="nav-link text-center" data-page="home-page">
+                <i class="bi bi-house-door-fill d-block"></i> Home
+            </a>
+            <a href="#" class="nav-link text-center" data-page="kompetisi-page">
+                <i class="bi bi-trophy-fill d-block"></i> Kompetisi
+            </a>
+            <a href="#" class="nav-link text-center" data-page="klub-page">
+                <i class="bi bi-people-fill d-block"></i> Klub
+            </a>
+            <a href="#" class="nav-link text-center" data-page="setting-page">
+                <i class="bi bi-gear-fill d-block"></i> Setting
+            </a>
+        </div>
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
