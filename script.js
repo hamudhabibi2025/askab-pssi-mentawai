@@ -1,4 +1,3 @@
-
 // GANTI DENGAN URL APPS SCRIPT ANDA SETELAH DEPLOY
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzzn7ZieFMApGz0qxdljK6aa1okfDOSuCh8h1i8-LKe066umohUR4DlVIDz-Kg8ieHY/exec'; 
 const IMGBB_API_KEY = 'e9c06944a26b81e611e960c10a31634f'; 
@@ -18,7 +17,7 @@ const klubModal = new bootstrap.Modal(document.getElementById('klubModal'));
 let ALL_DATA = {};
 let currentPageId = 'home-page';
 
-// --- [ UTILITY UI ] -----------------------------------------------------------------------------------
+// --- [ UTILITY UI & NAVIGASI ] -----------------------------------------------------------------------------------
 
 function showLoading() {
     loadingOverlay.classList.remove('d-none');
@@ -35,6 +34,21 @@ function showToast(message, isSuccess = true) {
     const toast = new bootstrap.Toast(toastElement);
     toast.show();
 }
+
+/**
+ * Memperbaiki masalah format URL ImgBB yang mungkin tidak tampil di browser.
+ * Menstandarkan semua domain i.ibb.co.com/ (seringkali salah) menjadi i.ibb.co/ (domain direct link standar).
+ */
+const fixImgbbUrl = (url) => {
+    if (!url || typeof url !== 'string') return url;
+    
+    // Asumsi: i.ibb.co.com/ adalah format yang salah dan harus dikembalikan ke i.ibb.co/
+    if (url.includes('i.ibb.co.com/')) {
+        return url.replace('i.ibb.co.com/', 'i.ibb.co/');
+    }
+    
+    return url;
+};
 
 function navigateTo(targetPageId, isFromHistory = false) {
     if (isFromHistory && currentPageId === 'home-page' && targetPageId === 'home-page') {
@@ -70,6 +84,22 @@ function navigateTo(targetPageId, isFromHistory = false) {
     if (targetPageId === 'kompetisi-page') loadKompetisi();
     if (targetPageId === 'klub-page') loadKlub();
     if (targetPageId === 'setting-page') loadSettingInitialData();
+}
+
+function formatDateForInput(dateString) {
+    if (!dateString) return '';
+    try {
+        const parts = dateString.split(/[\/\-]/);
+        let d, m, y;
+        
+        if (parts.length === 3) {
+            if (parts[0].length === 4) { [y, m, d] = parts; } else { [d, m, y] = parts; }
+            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+    } catch (e) {
+        console.warn("Format tanggal tidak dikenal:", dateString);
+    }
+    return '';
 }
 
 // --- [ API & UTILITY KOMUNIKASI ] -------------------------------------------------------------
@@ -109,8 +139,8 @@ async function fetchAPI(sheet, action, data = {}) {
 }
 
 async function uploadImage(file) {
-    if (!file) return null;
-    
+    if (!file || file.size === 0) return null;
+
     showLoading();
     const formData = new FormData();
     formData.append('image', file);
@@ -126,7 +156,8 @@ async function uploadImage(file) {
         hideLoading();
 
         if (result.success) {
-            return result.data.url;
+            // Mengembalikan DIRECT LINK ImgBB (https://i.ibb.co/...)
+            return result.data.url; 
         } else {
             showToast(`Gagal unggah gambar: ${result.error.message}`, false);
             return null;
@@ -138,21 +169,6 @@ async function uploadImage(file) {
     }
 }
 
-function formatDateForInput(dateString) {
-    if (!dateString) return '';
-    try {
-        const parts = dateString.split(/[\/\-]/);
-        let d, m, y;
-        
-        if (parts.length === 3) {
-            if (parts[0].length === 4) { [y, m, d] = parts; } else { [d, m, y] = parts; }
-            return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-        }
-    } catch (e) {
-        console.warn("Format tanggal tidak dikenal:", dateString);
-    }
-    return '';
-}
 
 // --- [ PEMUATAN DATA STATIS ] -------------------------------------------------------------------
 
@@ -160,9 +176,9 @@ async function loadStaticData() {
     const headerData = await fetchAPI('kepala_halaman', 'READ', {});
     if (headerData) {
         ALL_DATA.kepala_halaman = headerData;
-        document.getElementById('logo_pssi').src = headerData.logo_pssi;
+        document.getElementById('logo_pssi').src = fixImgbbUrl(headerData.logo_pssi);
         document.getElementById('judul_kepala').textContent = headerData.judul_kepala;
-        document.getElementById('logo_askab').src = headerData.logo_askab;
+        document.getElementById('logo_askab').src = fixImgbbUrl(headerData.logo_askab);
     }
 
     const bannerData = await fetchAPI('banner', 'READ', {});
@@ -170,7 +186,12 @@ async function loadStaticData() {
         ALL_DATA.banner = bannerData;
         const bannerInner = document.getElementById('banner-inner');
         bannerInner.innerHTML = '';
-        const images = [bannerData['poto-1'], bannerData['poto-2'], bannerData['poto-3']].filter(url => url && url.startsWith('http'));
+        
+        const images = [
+            fixImgbbUrl(bannerData['poto-1']), 
+            fixImgbbUrl(bannerData['poto-2']), 
+            fixImgbbUrl(bannerData['poto-3'])
+        ].filter(url => url && url.startsWith('http'));
         
         images.forEach((url, index) => {
             const item = document.createElement('div');
@@ -227,7 +248,7 @@ function renderBerita(data) {
         const card = `
             <div class="col-12 col-md-6 col-lg-4 mb-4 data-card" data-sheet="berita_home" data-search="${item.Judul_Berita.toLowerCase()} ${item.isi_berita.toLowerCase()}">
                 <div class="card shadow-sm h-100">
-                    <img src="${item.gambar_1 || 'https://via.placeholder.com/400x200?text=No+Image'}" class="card-img-top" alt="${item.Judul_Berita}" style="height:200px; object-fit:cover;">
+                    <img src="${fixImgbbUrl(item.gambar_1) || 'https://via.placeholder.com/400x200?text=No+Image'}" class="card-img-top" alt="${item.Judul_Berita}" style="height:200px; object-fit:cover;">
                     <div class="card-body d-flex flex-column">
                         <small class="text-muted">${date} | ID: ${item.id_berita}</small>
                         <h5 class="card-title">${item.Judul_Berita}</h5>
@@ -262,7 +283,7 @@ function renderKompetisi(data) {
                     <div class="card-body">
                         <div class="row text-center align-items-center">
                             <div class="col-4">
-                                <img src="${item.logo_klub1 || 'https://via.placeholder.com/50'}" class="img-fluid mb-1" style="height:50px; object-fit:contain;">
+                                <img src="${fixImgbbUrl(item.logo_klub1) || 'https://via.placeholder.com/50'}" class="img-fluid mb-1" style="height:50px; object-fit:contain;">
                                 <p class="mb-0 fw-bold">${item.nama_klub1}</p>
                             </div>
                             <div class="col-4">
@@ -270,7 +291,7 @@ function renderKompetisi(data) {
                                 <small class="text-muted d-block">${item.lokasi}</small>
                             </div>
                             <div class="col-4">
-                                <img src="${item.logo_klub2 || 'https://via.placeholder.com/50'}" class="img-fluid mb-1" style="height:50px; object-fit:contain;">
+                                <img src="${fixImgbbUrl(item.logo_klub2) || 'https://via.placeholder.com/50'}" class="img-fluid mb-1" style="height:50px; object-fit:contain;">
                                 <p class="mb-0 fw-bold">${item.nama_klub2}</p>
                             </div>
                         </div>
@@ -300,7 +321,7 @@ function renderKlub(data) {
             <div class="col-12 col-md-6 mb-4 data-card" data-sheet="klub" data-search="${searchString}">
                 <div class="card shadow-sm h-100">
                     <div class="card-body d-flex">
-                        <img src="${item.logo_klub || 'https://via.placeholder.com/80'}" alt="${item.nama_klub}" class="me-3 rounded-circle" style="width: 80px; height: 80px; object-fit: contain; border: 1px solid #ddd;">
+                        <img src="${fixImgbbUrl(item.logo_klub) || 'https://via.placeholder.com/80'}" alt="${item.nama_klub}" class="me-3 rounded-circle" style="width: 80px; height: 80px; object-fit: contain; border: 1px solid #ddd;">
                         <div class="flex-grow-1">
                             <h5 class="card-title mb-0">${item.nama_klub} <span class="badge bg-secondary">${item.julukan}</span></h5>
                             <small class="text-muted">Berdiri: ${item.tanggal_berdiri || 'N/A'}</small><br>
@@ -335,7 +356,7 @@ function resetForm(formId) {
     if (idMap[formId]) {
         document.getElementById(idMap[formId]).value = '';
         document.getElementById(modalMap[formId].label).textContent = modalMap[formId].title;
-        modalMap[formId].modal.hide();
+        // modalMap[formId].modal.hide(); // Dihapus karena akan ditutup setelah submit/reset manual
     }
 }
 
@@ -362,7 +383,7 @@ async function editData(sheetName, id, idColName) {
         if (key.startsWith('id_') || key.startsWith('logo_') || key.startsWith('gambar_') || key.startsWith('poto-')) {
              const hiddenInput = form.querySelector(`[name="${key}Hidden"]`);
              if(hiddenInput) hiddenInput.value = dataToEdit[key];
-             if(key.startsWith('id_')) input.value = dataToEdit[key]; // set ID field
+             if(key.startsWith('id_')) input.value = dataToEdit[key]; 
         }
     }
     modal.show();
@@ -402,8 +423,10 @@ async function handleFormSubmit(event, sheetName, action) {
             
             if (key.startsWith('logo_') || key.startsWith('gambar_') || key.startsWith('poto-')) {
                 if (value.size > 0) {
+                     // Ada file baru, unggah
                      uploadPromises.push(uploadImage(value).then(url => ({ key: key, url: url })));
                 } else if (isUpdateOperation) {
+                     // UPDATE tanpa file baru, gunakan URL lama dari hidden field
                      const oldValue = form.querySelector(`[name="${key}Hidden"]`)?.value || '';
                      data[key] = oldValue;
                 }
@@ -414,23 +437,29 @@ async function handleFormSubmit(event, sheetName, action) {
     }
     
     const uploadedUrls = await Promise.all(uploadPromises);
+    
+    // Proses hasil unggahan dan verifikasi data
     for (const { key, url } of uploadedUrls) {
         if (url) {
             data[key] = url;
         } else if (isUpdateOperation) {
+            // Unggahan gagal atau file kosong saat UPDATE, cek apakah ada URL lama
             const oldValue = form.querySelector(`[name="${key}Hidden"]`)?.value || '';
             if (oldValue && oldValue.startsWith('http')) {
-                data[key] = oldValue;
+                data[key] = oldValue; // Fallback ke URL lama
             } else if(form.querySelector(`[name="${key}"][required]`)) {
+                // Jika required dan tidak ada URL baru/lama
                 showToast(`Unggahan gambar ${key} gagal dan tidak ada URL lama. Operasi dibatalkan.`, false);
                 return; 
             }
         } else if(form.querySelector(`[name="${key}"][required]`)) {
+             // Jika CREATE dan upload gagal
              showToast(`Unggahan gambar ${key} gagal. Operasi dibatalkan.`, false);
              return; 
         }
     }
     
+    // Kirim data ke Apps Script
     const result = await fetchAPI(sheetName, action, data);
     
     if (result) {
@@ -443,7 +472,10 @@ async function handleFormSubmit(event, sheetName, action) {
             loadSettingData(sheetName); 
         }
 
-        resetForm(form.id);
+        // Tutup modal setelah berhasil 
+        const modalMap = { 'beritaForm': beritaModal, 'kompetisiForm': kompetisiModal, 'klubForm': klubModal };
+        if (modalMap[form.id]) { modalMap[form.id].hide(); }
+        resetForm(form.id); 
     }
 }
 
@@ -471,7 +503,6 @@ function loadSettingData(sheetName) {
 async function loadStaticDataToForm(sheetName) {
     const data = ALL_DATA[sheetName];
     if (!data) {
-        // Coba load lagi jika belum ada di cache
         const freshData = await fetchAPI(sheetName, 'READ');
         if (freshData) ALL_DATA[sheetName] = freshData;
         else return;
@@ -487,10 +518,11 @@ async function loadStaticDataToForm(sheetName) {
             else { input.value = data[key]; }
         }
         
-        // Set hidden field untuk gambar statis
+        // Set hidden field untuk URL gambar statis (sudah diperbaiki)
         if (key.startsWith('logo_') || key.startsWith('poto-')) {
              const hiddenInput = form.querySelector(`[name="${key}Hidden"]`);
-             if(hiddenInput) hiddenInput.value = data[key];
+             // Pastikan URL yang disimpan di hidden field sudah diperbaiki
+             if(hiddenInput) hiddenInput.value = fixImgbbUrl(data[key]);
         }
     }
 }
